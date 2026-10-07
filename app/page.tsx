@@ -15,16 +15,25 @@ const nextStatus: Record<string, string | undefined> = { DRAFT: "SOON", SOON: "O
 const nowInput = (hours: number) => new Date(Date.now() + hours * 3600000 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
 export default function Home() {
-  const [apiBase, setApiBase] = useState(() => typeof window === "undefined" ? "http://localhost:5000/api" : sessionStorage.getItem("marketpe_admin_api_base") || "http://localhost:5000/api");
-  const [token, setToken] = useState(() => typeof window === "undefined" ? "" : sessionStorage.getItem("marketpe_admin_token") || "");
+  const [mounted, setMounted] = useState(false);
+  const [apiBase, setApiBase] = useState("http://localhost:5000/api");
+  const [token, setToken] = useState("");
   const [mobile, setMobile] = useState(""); const [password, setPassword] = useState(""); const [otp, setOtp] = useState(""); const [otpRequested, setOtpRequested] = useState(false);
   const [filter, setFilter] = useState("ALL"); const [contests, setContests] = useState<Contest[]>([]); const [loading, setLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false); const [settling, setSettling] = useState<Contest | null>(null); const [closingValue, setClosingValue] = useState("");
   const [form, setForm] = useState({ publicId: "", title: "", question: "", instrumentCode: "NIFTY50", entryCredits: "50", prizePoolCredits: "1000", playerCapacity: "100", opensAt: nowInput(2), closesAt: nowInput(6), settlementSource: "Demo market reference" });
 
+  useEffect(() => {
+    setMounted(true);
+    const savedToken = sessionStorage.getItem("marketpe_admin_token");
+    const savedApi = sessionStorage.getItem("marketpe_admin_api_base");
+    if (savedToken) setToken(savedToken);
+    if (savedApi) setApiBase(savedApi);
+  }, []);
+
   const request = async (path: string, options: RequestInit = {}) => { const response = await fetch(`${apiBase.replace(/\/$/, "")}${path}`, { ...options, headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers } }); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.message || "Request failed"); return data; };
   const load = async () => { if (!token) return; setLoading(true); try { const data = await request(`/admin/contests?status=${filter}`); setContests(data.contests || []); } catch (e) { toast.error(e instanceof Error ? e.message : "Could not load contests"); } finally { setLoading(false); } };
-  useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [token, filter]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!mounted) return; const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [token, filter, mounted]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const requestOtp = async (event: FormEvent) => { event.preventDefault(); try { await request("/auth/signin", { method: "POST", body: JSON.stringify({ mobile, password }) }); setOtpRequested(true); toast.success("OTP sent. Enter it to continue."); } catch (e) { toast.error(e instanceof Error ? e.message : "Sign-in failed"); } };
   const verifyOtp = async (event: FormEvent) => { event.preventDefault(); try { const data = await request("/auth/verify-otp", { method: "POST", body: JSON.stringify({ mobile, otp, purpose: "signin" }) }); sessionStorage.setItem("marketpe_admin_token", data.token); sessionStorage.setItem("marketpe_admin_api_base", apiBase); setToken(data.token); toast.success("Admin session started"); } catch (e) { toast.error(e instanceof Error ? e.message : "OTP verification failed"); } };
@@ -33,13 +42,220 @@ export default function Home() {
   const settle = async (event: FormEvent) => { event.preventDefault(); if (!settling) return; try { const data = await request(`/admin/contests/${settling.public_id}/settle`, { method: "POST", body: JSON.stringify({ closingValue: Number(closingValue), settlementNotes: "Settled from Admin Console" }) }); toast.success(`Settlement complete: ${data.contest.winnerCount} winner(s)`); setSettling(null); setClosingValue(""); load(); } catch (e) { toast.error(e instanceof Error ? e.message : "Settlement failed"); } };
   const stats = useMemo(() => ({ open: contests.filter((c) => c.status === "OPEN").length, live: contests.filter((c) => c.status === "LIVE").length, entries: contests.reduce((n, c) => n + Number(c.player_count), 0), pool: contests.reduce((n, c) => n + Number(c.prize_pool_credits), 0) }), [contests]);
 
+  if (!mounted) return <div className="min-h-screen bg-[#071d1a]" />;
   if (!token) return <Login apiBase={apiBase} setApiBase={setApiBase} mobile={mobile} setMobile={setMobile} password={password} setPassword={setPassword} otp={otp} setOtp={setOtp} otpRequested={otpRequested} requestOtp={requestOtp} verifyOtp={verifyOtp} />;
-  return <main className="min-h-screen bg-[#f3f7f5] text-slate-950"><Toaster richColors position="top-right" /><div className="grid min-h-screen lg:grid-cols-[248px_1fr]"><aside className="border-b border-emerald-950/20 bg-[#071d1a] px-5 py-6 text-emerald-50 lg:border-b-0 lg:border-r"><div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-xl bg-emerald-400 text-[#071d1a]"><Activity size={21} /></div><div><p className="text-lg font-black">MarketPe</p><p className="text-xs text-emerald-100/60">Admin Console</p></div></div><nav className="mt-9 space-y-2"><Nav active icon={<ClipboardList size={18} />} label="Contest operations" /><Nav icon={<Users size={18} />} label="Client directory" /><Nav icon={<Trophy size={18} />} label="Audit & risk" /></nav><div className="mt-8 rounded-xl border border-emerald-300/15 bg-emerald-400/5 p-4 text-sm leading-5 text-emerald-100/75"><b className="text-emerald-200">Demo environment</b><br />Virtual credits only. No USDT or real-money action is enabled.</div><Button variant="ghost" className="mt-8 w-full justify-start text-emerald-100 hover:bg-emerald-50/10 hover:text-white" onClick={() => { sessionStorage.removeItem("marketpe_admin_token"); setToken(""); }}><LogOut size={17} /> Sign out</Button></aside><section className="min-w-0 p-5 md:p-8 lg:p-10"><header className="flex flex-col justify-between gap-5 border-b border-slate-200 pb-7 sm:flex-row sm:items-end"><div><p className="text-sm font-bold uppercase tracking-[.16em] text-emerald-700">Operations / contests</p><h1 className="mt-2 text-3xl font-black tracking-tight">Contest control room</h1><p className="mt-2 text-base text-slate-600">Create, launch, close, and settle virtual-credit prediction contests.</p></div><Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => setCreateOpen(true)}><Plus size={18} /> Create contest</Button></header><div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Open contests" value={stats.open} icon={<ClipboardList />} /><Metric label="Live contests" value={stats.live} icon={<Activity />} /><Metric label="Entries shown" value={stats.entries.toLocaleString("en-IN")} icon={<Users />} /><Metric label="Demo prize pool" value={`${stats.pool.toLocaleString("en-IN")} cr`} icon={<Trophy />} /></div><section className="mt-8 rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-4 border-b border-slate-100 p-5 md:flex-row md:items-center md:justify-between"><div><h2 className="text-lg font-extrabold">Contests</h2><p className="mt-1 text-sm text-slate-500">Only valid lifecycle transitions are available.</p></div><Button variant="outline" onClick={load} disabled={loading}><RefreshCw className={loading ? "animate-spin" : ""} size={16} /> Refresh</Button></div><div className="flex gap-2 overflow-auto border-b border-slate-100 px-5 py-3">{statuses.map((status) => <button key={status} onClick={() => setFilter(status)} className={`rounded-full px-3 py-1.5 text-sm font-bold ${filter === status ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-emerald-50"}`}>{status}</button>)}</div><Table><TableHeader><TableRow><TableHead>Contest</TableHead><TableHead>Status</TableHead><TableHead>Entries</TableHead><TableHead>Demo pool</TableHead><TableHead>Closes</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader><TableBody>{contests.map((contest) => <TableRow key={contest.public_id}><TableCell><p className="font-bold">{contest.title}</p><p className="max-w-[260px] truncate text-xs text-slate-500">{contest.question}</p></TableCell><TableCell><Status status={contest.status} /></TableCell><TableCell>{contest.player_count.toLocaleString("en-IN")} / {contest.player_capacity.toLocaleString("en-IN")}</TableCell><TableCell>{contest.prize_pool_credits.toLocaleString("en-IN")} cr</TableCell><TableCell className="text-slate-600">{new Date(contest.closes_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</TableCell><TableCell className="text-right">{contest.status === "CLOSED" ? <Button size="sm" onClick={() => setSettling(contest)}>Settle</Button> : nextStatus[contest.status] ? <Button size="sm" variant="outline" onClick={() => advance(contest)}>{nextStatus[contest.status]} <ChevronRight size={15} /></Button> : <span className="text-xs font-bold text-slate-400">No action</span>}</TableCell></TableRow>)}{!loading && contests.length === 0 && <TableRow><TableCell colSpan={6} className="py-14 text-center text-slate-500">No contests in this status.</TableCell></TableRow>}</TableBody></Table></section></section></div><CreateDialog open={createOpen} onOpenChange={setCreateOpen} form={form} setForm={setForm} onSubmit={create} /><SettleDialog contest={settling} onOpenChange={(open) => !open && setSettling(null)} closingValue={closingValue} setClosingValue={setClosingValue} onSubmit={settle} /></main>;
+  return <main className="min-h-screen bg-[#f3f7f5] text-slate-950"><Toaster richColors position="top-right" /><div className="grid min-h-screen lg:grid-cols-[248px_1fr]"><aside className="border-b border-emerald-950/20 bg-[#071d1a] px-5 py-6 text-emerald-50 lg:border-b-0 lg:border-r"><div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-xl bg-emerald-400 text-[#071d1a]"><Activity size={21} /></div><div><p className="text-lg font-black">MarketPe</p><p className="text-xs text-emerald-100/60">Admin Console</p></div></div><nav className="mt-9 space-y-2"><Nav active icon={<ClipboardList size={18} />} label="Contest operations" /><Nav icon={<Users size={18} />} label="Client directory" /><Nav icon={<Trophy size={18} />} label="Audit & risk" /></nav><div className="mt-8 rounded-xl border border-emerald-300/15 bg-emerald-400/5 p-4 text-sm leading-5 text-emerald-100/75"><b className="text-emerald-200">Demo environment</b><br />Virtual credits only. No USDT or real-money action is enabled.</div><Button variant="ghost" className="mt-8 w-full justify-start text-emerald-100 hover:bg-emerald-50/10 hover:text-white" onClick={() => { sessionStorage.removeItem("marketpe_admin_token"); setToken(""); }}><LogOut size={17} /> Sign out</Button></aside><section className="min-w-0 p-5 md:p-8 lg:p-10"><header className="flex flex-col justify-between gap-5 border-b border-slate-200 pb-7 sm:flex-row sm:items-end"><div><p className="text-sm font-bold uppercase tracking-[.16em] text-emerald-700">Operations / contests</p><h1 className="mt-2 text-3xl font-black tracking-tight">Contest control room</h1><p className="mt-2 text-base text-slate-600">Create, launch, close, and settle virtual-credit prediction contests with real-time stock feeds.</p></div><Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => setCreateOpen(true)}><Plus size={18} /> Create contest</Button></header><div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Open contests" value={stats.open} icon={<ClipboardList />} /><Metric label="Live contests" value={stats.live} icon={<Activity />} /><Metric label="Entries shown" value={stats.entries.toLocaleString("en-IN")} icon={<Users />} /><Metric label="Demo prize pool" value={`${stats.pool.toLocaleString("en-IN")} cr`} icon={<Trophy />} /></div><section className="mt-8 rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-4 border-b border-slate-100 p-5 md:flex-row md:items-center md:justify-between"><div><h2 className="text-lg font-extrabold">Contests</h2><p className="mt-1 text-sm text-slate-500">Only valid lifecycle transitions are available.</p></div><Button variant="outline" onClick={load} disabled={loading}><RefreshCw className={loading ? "animate-spin" : ""} size={16} /> Refresh</Button></div><div className="flex gap-2 overflow-auto border-b border-slate-100 px-5 py-3">{statuses.map((status) => <button key={status} onClick={() => setFilter(status)} className={`rounded-full px-3 py-1.5 text-sm font-bold ${filter === status ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-emerald-50"}`}>{status}</button>)}</div><Table><TableHeader><TableRow><TableHead>Contest</TableHead><TableHead>Status</TableHead><TableHead>Entries</TableHead><TableHead>Demo pool</TableHead><TableHead>Closes</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader><TableBody>{contests.map((contest) => <TableRow key={contest.public_id}><TableCell><p className="font-bold">{contest.title}</p><p className="max-w-[260px] truncate text-xs text-slate-500">{contest.question}</p></TableCell><TableCell><Status status={contest.status} /></TableCell><TableCell>{contest.player_count.toLocaleString("en-IN")} / {contest.player_capacity.toLocaleString("en-IN")}</TableCell><TableCell>{contest.prize_pool_credits.toLocaleString("en-IN")} cr</TableCell><TableCell className="text-slate-600">{new Date(contest.closes_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</TableCell><TableCell className="text-right">{contest.status === "CLOSED" ? <Button size="sm" onClick={() => setSettling(contest)}>Settle</Button> : nextStatus[contest.status] ? <Button size="sm" variant="outline" onClick={() => advance(contest)}>{nextStatus[contest.status]} <ChevronRight size={15} /></Button> : <span className="text-xs font-bold text-slate-400">No action</span>}</TableCell></TableRow>)}{!loading && contests.length === 0 && <TableRow><TableCell colSpan={6} className="py-14 text-center text-slate-500">No contests in this status.</TableCell></TableRow>}</TableBody></Table></section></section></div><CreateDialog open={createOpen} onOpenChange={setCreateOpen} form={form} setForm={setForm} onSubmit={create} apiBase={apiBase} /><SettleDialog contest={settling} onOpenChange={(open) => !open && setSettling(null)} closingValue={closingValue} setClosingValue={setClosingValue} onSubmit={settle} /></main>;
 }
 
 function Login(p: { apiBase: string; setApiBase: (s: string) => void; mobile: string; setMobile: (s: string) => void; password: string; setPassword: (s: string) => void; otp: string; setOtp: (s: string) => void; otpRequested: boolean; requestOtp: (e: FormEvent) => void; verifyOtp: (e: FormEvent) => void }) { return <main className="grid min-h-screen place-items-center bg-[#071d1a] p-5"><Toaster richColors position="top-right" /><section className="w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl"><div className="grid size-12 place-items-center rounded-2xl bg-emerald-500 text-[#071d1a]"><ShieldCheck size={25} /></div><p className="mt-6 text-sm font-bold uppercase tracking-[.15em] text-emerald-700">Restricted access</p><h1 className="mt-2 text-3xl font-black">Admin Console</h1><p className="mt-2 text-base text-slate-600">Use an account that has been granted an Administrator role.</p><label className="mt-6 block text-sm font-bold text-slate-700">Backend API address<Input className="mt-2" value={p.apiBase} onChange={(e) => p.setApiBase(e.target.value)} /></label>{p.otpRequested ? <form onSubmit={p.verifyOtp} className="mt-6 space-y-4"><Input placeholder="6-digit OTP" inputMode="numeric" value={p.otp} onChange={(e) => p.setOtp(e.target.value)} required /><Button className="w-full bg-emerald-600 hover:bg-emerald-700">Verify and continue</Button></form> : <form onSubmit={p.requestOtp} className="mt-6 space-y-4"><Input placeholder="Mobile number" inputMode="numeric" value={p.mobile} onChange={(e) => p.setMobile(e.target.value)} required /><Input placeholder="Password" type="password" value={p.password} onChange={(e) => p.setPassword(e.target.value)} required /><Button className="w-full bg-emerald-600 hover:bg-emerald-700">Send OTP</Button></form>}</section></main>; }
 function Nav({ icon, label, active = false }: { icon: ReactNode; label: string; active?: boolean }) { return <div className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold ${active ? "bg-emerald-400 text-[#06201b]" : "text-emerald-100/70"}`}>{icon}{label}</div>; }
 function Metric({ label, value, icon }: { label: string; value: string | number; icon: ReactNode }) { return <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex justify-between"><p className="text-sm font-bold text-slate-500">{label}</p><span className="text-emerald-600">{icon}</span></div><p className="mt-5 text-2xl font-black">{value}</p></div>; }
 function Status({ status }: { status: string }) { const styles: Record<string, string> = { DRAFT: "bg-slate-100 text-slate-600", SOON: "bg-amber-100 text-amber-800", OPEN: "bg-emerald-100 text-emerald-800", LIVE: "bg-rose-100 text-rose-700", CLOSED: "bg-indigo-100 text-indigo-700", SETTLED: "bg-teal-100 text-teal-800", CANCELLED: "bg-slate-200 text-slate-600" }; return <span className={`rounded-full px-2.5 py-1 text-xs font-black ${styles[status]}`}>{status}</span>; }
-function CreateDialog({ open, onOpenChange, form, setForm, onSubmit }: { open: boolean; onOpenChange: (o: boolean) => void; form: Record<string, string>; setForm: (f: Record<string, string>) => void; onSubmit: (e: FormEvent) => void }) { const field = (key: string, label: string, type = "text") => <label className="text-sm font-bold text-slate-700">{label}<Input className="mt-1.5" type={type} value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} required /></label>; return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"><DialogHeader><DialogTitle>Create demo contest</DialogTitle><DialogDescription>This starts as Draft and remains hidden from mobile users.</DialogDescription></DialogHeader><form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">{field("title", "Contest title")}{field("publicId", "Public ID")}{field("instrumentCode", "Instrument code")}{field("entryCredits", "Entry credits", "number")}{field("prizePoolCredits", "Demo prize pool", "number")}{field("playerCapacity", "Player capacity", "number")}<label className="sm:col-span-2 text-sm font-bold text-slate-700">Question<textarea className="mt-1.5 min-h-20 w-full rounded-md border border-slate-200 p-3" value={form.question} onChange={(e) => setForm({ ...form, question: e.target.value })} required /></label>{field("opensAt", "Opens at", "datetime-local")}{field("closesAt", "Closes at", "datetime-local")}<label className="sm:col-span-2 text-sm font-bold text-slate-700">Settlement source<Input className="mt-1.5" value={form.settlementSource} onChange={(e) => setForm({ ...form, settlementSource: e.target.value })} required /></label><DialogFooter className="sm:col-span-2"><Button type="submit" className="bg-emerald-600 hover:bg-emerald-700">Create Draft</Button></DialogFooter></form></DialogContent></Dialog>; }
+
+type StockIndex = { symbol: string; rawSymbol: string; name: string; value: string; rawValue: number; change: string; changeValue: string; isPositive: boolean; type?: string; provider?: string };
+
+function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: { open: boolean; onOpenChange: (o: boolean) => void; form: Record<string, string>; setForm: (f: Record<string, string>) => void; onSubmit: (e: FormEvent) => void; apiBase: string }) {
+  const [indices, setIndices] = useState<StockIndex[]>([]);
+  const [selectedStock, setSelectedStock] = useState<StockIndex | null>(null);
+  const [loadingStocks, setLoadingStocks] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [category, setCategory] = useState<"ALL" | "INDEX" | "STOCK">("ALL");
+
+  useEffect(() => {
+    if (!open) return;
+    setLoadingStocks(true);
+    fetch(`${apiBase.replace(/\/$/, "")}/market/indices`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.data && Array.isArray(data.data)) {
+          setIndices(data.data);
+          if (data.data.length > 0 && !selectedStock) {
+            handleSelectStock(data.data[0]);
+          }
+        }
+      })
+      .catch((err) => console.error("Error fetching market data:", err))
+      .finally(() => setLoadingStocks(false));
+  }, [open, apiBase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Real-time live search across entire stock & index market
+  useEffect(() => {
+    if (!searchQuery.trim() || searchQuery.length < 2) return;
+    const timer = setTimeout(() => {
+      setLoadingStocks(true);
+      fetch(`${apiBase.replace(/\/$/, "")}/market/search?q=${encodeURIComponent(searchQuery)}`)
+        .then((res) => res.json())
+        .then((resData) => {
+          if (resData?.data && Array.isArray(resData.data) && resData.data.length > 0) {
+            setIndices((prev) => {
+              const map = new Map(prev.map((i) => [i.symbol, i]));
+              resData.data.forEach((item: StockIndex) => map.set(item.symbol, item));
+              return Array.from(map.values());
+            });
+          }
+        })
+        .catch((err) => console.error("Search error:", err))
+        .finally(() => setLoadingStocks(false));
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, apiBase]);
+
+  const handleSelectStock = (stock: StockIndex) => {
+    setSelectedStock(stock);
+    const cleanSymbol = stock.symbol.replace(/[^a-zA-Z0-9]/g, "");
+    const generatedId = `${cleanSymbol.toLowerCase()}-${Date.now().toString().slice(-5)}`;
+    
+    setForm({
+      ...form,
+      publicId: generatedId,
+      instrumentCode: cleanSymbol,
+      title: `${stock.name} Prediction`,
+      question: `Will ${stock.name} close above ₹${stock.value} by market close?`,
+      settlementSource: `${stock.name} official market closing price via Yahoo Finance`,
+    });
+  };
+
+  const filteredList = useMemo(() => {
+    return indices.filter((stk) => {
+      const matchesCat = category === "ALL" || (category === "INDEX" ? stk.type === "INDEX" : stk.type !== "INDEX");
+      const matchesSearch =
+        !searchQuery.trim() ||
+        stk.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        stk.symbol.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCat && matchesSearch;
+    });
+  }, [indices, category, searchQuery]);
+
+  const field = (key: string, label: string, type = "text") => <label className="text-sm font-bold text-slate-700">{label}<Input className="mt-1.5" type={type} value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} required /></label>;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Create Contest from Real Stock API</DialogTitle>
+          <DialogDescription>Search or select any live stock or index from Yahoo Finance to auto-fill contest data.</DialogDescription>
+        </DialogHeader>
+
+        {/* Live Stock / Index Selector & Search */}
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-800">
+              ⚡ Live Instruments ({filteredList.length} shown)
+            </span>
+            {loadingStocks && <span className="text-xs font-semibold text-emerald-600 animate-pulse">Loading live market feed...</span>}
+          </div>
+
+          {/* Search Bar & Category Filters */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Input
+              placeholder="🔍 Search any stock/index (e.g. NIFTY, SENSEX, RELIANCE, TATA, INFY)..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-white text-xs h-8"
+            />
+            <div className="flex gap-1">
+              {(["ALL", "INDEX", "STOCK"] as const).map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setCategory(cat)}
+                  className={`rounded-md px-2.5 py-1 text-xs font-bold transition-all ${
+                    category === cat
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "bg-white text-slate-600 border border-slate-200 hover:bg-emerald-50"
+                  }`}
+                >
+                  {cat === "ALL" ? "All" : cat === "INDEX" ? "Indices" : "Stocks"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Instrument Badges */}
+          <div className="flex flex-wrap gap-2 pt-1 max-h-36 overflow-y-auto">
+            {filteredList.map((stk) => {
+              const isSelected = selectedStock?.symbol === stk.symbol || form.instrumentCode === stk.symbol.replace(/[^a-zA-Z0-9]/g, "");
+              return (
+                <button
+                  key={stk.symbol}
+                  type="button"
+                  onClick={() => handleSelectStock(stk)}
+                  className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 border ${
+                    isSelected
+                      ? "bg-emerald-600 text-white border-emerald-700 shadow-sm"
+                      : "bg-white text-slate-700 border-slate-200 hover:bg-emerald-100/50"
+                  }`}
+                >
+                  <span>{stk.name}</span>
+                  <span className={`text-[11px] font-mono ${isSelected ? "text-emerald-100" : stk.isPositive ? "text-emerald-600 font-semibold" : "text-rose-600 font-semibold"}`}>
+                    ₹{stk.value} ({stk.change})
+                  </span>
+                </button>
+              );
+            })}
+            {filteredList.length === 0 && !loadingStocks && (
+              <p className="text-xs text-slate-500 py-2">No matching stocks found. Type in search to discover more.</p>
+            )}
+          </div>
+
+          {/* Selected Stock Live Card */}
+          {selectedStock && (
+            <div className="mt-2 flex items-center justify-between rounded-lg bg-white p-2.5 text-xs border border-emerald-100 shadow-2xs">
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-slate-800">{selectedStock.name}</span>
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-600">{selectedStock.rawSymbol}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-900">₹{selectedStock.value}</span>
+                <span className={`font-semibold ${selectedStock.isPositive ? "text-emerald-600" : "text-rose-600"}`}>
+                  {selectedStock.change}
+                </span>
+                <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 uppercase">
+                  Yahoo Live
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2 mt-2">
+          {field("title", "Contest title")}
+          {field("publicId", "Public ID")}
+          {field("instrumentCode", "Instrument code")}
+          {field("entryCredits", "Entry credits", "number")}
+          {field("prizePoolCredits", "Demo prize pool", "number")}
+          {field("playerCapacity", "Player capacity", "number")}
+          <label className="sm:col-span-2 text-sm font-bold text-slate-700">
+            Question
+            <textarea
+              className="mt-1.5 min-h-20 w-full rounded-md border border-slate-200 p-3"
+              value={form.question}
+              onChange={(e) => setForm({ ...form, question: e.target.value })}
+              required
+            />
+          </label>
+          {field("opensAt", "Opens at", "datetime-local")}
+          {field("closesAt", "Closes at", "datetime-local")}
+          <label className="sm:col-span-2 text-sm font-bold text-slate-700">
+            Settlement source
+            <Input
+              className="mt-1.5"
+              value={form.settlementSource}
+              onChange={(e) => setForm({ ...form, settlementSource: e.target.value })}
+              required
+            />
+          </label>
+          <DialogFooter className="sm:col-span-2">
+            <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700">
+              Create Draft Contest
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
 function SettleDialog({ contest, onOpenChange, closingValue, setClosingValue, onSubmit }: { contest: Contest | null; onOpenChange: (o: boolean) => void; closingValue: string; setClosingValue: (s: string) => void; onSubmit: (e: FormEvent) => void }) { return <Dialog open={Boolean(contest)} onOpenChange={onOpenChange}><DialogContent><DialogHeader><DialogTitle>Settle {contest?.title}</DialogTitle><DialogDescription>Enter final demo closing value. Closest saved prediction wins; ties split the pool.</DialogDescription></DialogHeader><form onSubmit={onSubmit} className="space-y-4"><Input type="number" step="0.01" placeholder="Final closing value" value={closingValue} onChange={(e) => setClosingValue(e.target.value)} required /><DialogFooter><Button type="submit" className="bg-emerald-600 hover:bg-emerald-700">Confirm settlement</Button></DialogFooter></form></DialogContent></Dialog>; }
