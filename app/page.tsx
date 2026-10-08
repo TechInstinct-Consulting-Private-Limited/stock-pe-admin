@@ -53,24 +53,41 @@ function Metric({ label, value, icon }: { label: string; value: string | number;
 function Status({ status }: { status: string }) { const styles: Record<string, string> = { DRAFT: "bg-slate-100 text-slate-600", SOON: "bg-amber-100 text-amber-800", OPEN: "bg-emerald-100 text-emerald-800", LIVE: "bg-rose-100 text-rose-700", CLOSED: "bg-indigo-100 text-indigo-700", SETTLED: "bg-teal-100 text-teal-800", CANCELLED: "bg-slate-200 text-slate-600" }; return <span className={`rounded-full px-2.5 py-1 text-xs font-black ${styles[status]}`}>{status}</span>; }
 
 type StockIndex = { symbol: string; rawSymbol: string; name: string; value: string; rawValue: number; change: string; changeValue: string; isPositive: boolean; type?: string; provider?: string };
+type MarketSearchItem = { instrumentCode: string; name: string; rawSymbol: string; quote?: { value?: string; rawValue?: number; change?: string; changeValue?: string; isPositive?: boolean } };
+
+function toStockIndex(item: MarketSearchItem): StockIndex {
+  return {
+    symbol: item.instrumentCode,
+    rawSymbol: item.rawSymbol,
+    name: item.name,
+    value: item.quote?.value || "—",
+    rawValue: Number(item.quote?.rawValue || 0),
+    change: item.quote?.change || "0.00%",
+    changeValue: item.quote?.changeValue || "0.00",
+    isPositive: Boolean(item.quote?.isPositive),
+    type: "INDEX",
+    provider: "yahoo",
+  };
+}
 
 function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: { open: boolean; onOpenChange: (o: boolean) => void; form: Record<string, string>; setForm: (f: Record<string, string>) => void; onSubmit: (e: FormEvent) => void; apiBase: string }) {
   const [indices, setIndices] = useState<StockIndex[]>([]);
   const [selectedStock, setSelectedStock] = useState<StockIndex | null>(null);
   const [loadingStocks, setLoadingStocks] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [category, setCategory] = useState<"ALL" | "INDEX" | "STOCK">("ALL");
+  const [category, setCategory] = useState<"ALL" | "INDEX">("ALL");
 
   useEffect(() => {
     if (!open) return;
     setLoadingStocks(true);
-    fetch(`${apiBase.replace(/\/$/, "")}/market/indices`)
+    fetch(`${apiBase.replace(/\/$/, "")}/market/search?q=all`)
       .then((res) => res.json())
       .then((data) => {
         if (data?.data && Array.isArray(data.data)) {
-          setIndices(data.data);
-          if (data.data.length > 0 && !selectedStock) {
-            handleSelectStock(data.data[0]);
+          const supportedIndices = data.data.map(toStockIndex);
+          setIndices(supportedIndices);
+          if (supportedIndices.length > 0 && !selectedStock) {
+            handleSelectStock(supportedIndices[0]);
           }
         }
       })
@@ -78,7 +95,7 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
       .finally(() => setLoadingStocks(false));
   }, [open, apiBase]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Real-time live search across entire stock & index market
+  // Search only registered instruments that the current demo contest schema supports.
   useEffect(() => {
     if (!searchQuery.trim() || searchQuery.length < 2) return;
     const timer = setTimeout(() => {
@@ -89,7 +106,7 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
           if (resData?.data && Array.isArray(resData.data) && resData.data.length > 0) {
             setIndices((prev) => {
               const map = new Map(prev.map((i) => [i.symbol, i]));
-              resData.data.forEach((item: StockIndex) => map.set(item.symbol, item));
+              resData.data.map(toStockIndex).forEach((item: StockIndex) => map.set(item.symbol, item));
               return Array.from(map.values());
             });
           }
@@ -133,15 +150,15 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Create Contest from Real Stock API</DialogTitle>
-          <DialogDescription>Search or select any live stock or index from Yahoo Finance to auto-fill contest data.</DialogDescription>
+          <DialogTitle>Create Contest from Market Data</DialogTitle>
+          <DialogDescription>Select a registered live index to auto-fill a virtual-credit demo contest.</DialogDescription>
         </DialogHeader>
 
         {/* Live Stock / Index Selector & Search */}
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-2.5">
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-800">
-              ⚡ Live Instruments ({filteredList.length} shown)
+              ⚡ Supported live indices ({filteredList.length} shown)
             </span>
             {loadingStocks && <span className="text-xs font-semibold text-emerald-600 animate-pulse">Loading live market feed...</span>}
           </div>
@@ -149,13 +166,13 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
           {/* Search Bar & Category Filters */}
           <div className="flex flex-col sm:flex-row gap-2">
             <Input
-              placeholder="🔍 Search any stock/index (e.g. NIFTY, SENSEX, RELIANCE, TATA, INFY)..."
+              placeholder="Search supported indices (e.g. NIFTY, SENSEX, BANK)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="bg-white text-xs h-8"
             />
             <div className="flex gap-1">
-              {(["ALL", "INDEX", "STOCK"] as const).map((cat) => (
+              {(["ALL", "INDEX"] as const).map((cat) => (
                 <button
                   key={cat}
                   type="button"
@@ -166,7 +183,7 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
                       : "bg-white text-slate-600 border border-slate-200 hover:bg-emerald-50"
                   }`}
                 >
-                  {cat === "ALL" ? "All" : cat === "INDEX" ? "Indices" : "Stocks"}
+                  {cat === "ALL" ? "All" : "Indices"}
                 </button>
               ))}
             </div>
@@ -195,7 +212,7 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
               );
             })}
             {filteredList.length === 0 && !loadingStocks && (
-              <p className="text-xs text-slate-500 py-2">No matching stocks found. Type in search to discover more.</p>
+              <p className="text-xs text-slate-500 py-2">No supported index matches this search.</p>
             )}
           </div>
 
