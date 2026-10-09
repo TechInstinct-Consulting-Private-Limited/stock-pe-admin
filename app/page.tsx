@@ -9,19 +9,19 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Toaster } from "@/components/ui/sonner";
 
-type Contest = { public_id: string; title: string; question: string; status: string; entry_credits: number; prize_pool_credits: number; player_capacity: number; player_count: number; closes_at: string };
+type Contest = { public_id: string; title: string; question: string; status: string; entry_credits: number; prize_pool_credits: number; player_capacity: number; player_count: number; lifecycle_mode?: string; live_at?: string | null; closes_at: string };
 const statuses = ["ALL", "DRAFT", "SOON", "OPEN", "LIVE", "CLOSED", "SETTLED", "CANCELLED"];
 const nextStatus: Record<string, string | undefined> = { DRAFT: "SOON", SOON: "OPEN", OPEN: "LIVE", LIVE: "CLOSED" };
 const nowInput = (hours: number) => new Date(Date.now() + hours * 3600000 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
-  const [apiBase, setApiBase] = useState("http://localhost:5000/api");
+  const [apiBase, setApiBase] = useState("https://13.126.195.235.nip.io/api");
   const [token, setToken] = useState("");
   const [mobile, setMobile] = useState(""); const [password, setPassword] = useState(""); const [otp, setOtp] = useState(""); const [otpRequested, setOtpRequested] = useState(false);
   const [filter, setFilter] = useState("ALL"); const [contests, setContests] = useState<Contest[]>([]); const [loading, setLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false); const [settling, setSettling] = useState<Contest | null>(null); const [closingValue, setClosingValue] = useState("");
-  const [form, setForm] = useState({ publicId: "", title: "", question: "", instrumentCode: "NIFTY50", entryCredits: "50", prizePoolCredits: "1000", playerCapacity: "100", opensAt: nowInput(2), closesAt: nowInput(6), settlementSource: "Demo market reference" });
+  const [form, setForm] = useState({ publicId: "", title: "", question: "", instrumentCode: "NIFTY50", entryCredits: "50", prizePoolCredits: "1000", playerCapacity: "100", lifecycleMode: "SCHEDULED", opensAt: nowInput(2), liveAt: nowInput(4), closesAt: nowInput(6), settlementSource: "Demo market reference" });
 
   useEffect(() => {
     setMounted(true);
@@ -243,6 +243,7 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
           {field("entryCredits", "Entry credits", "number")}
           {field("prizePoolCredits", "Demo prize pool", "number")}
           {field("playerCapacity", "Player capacity", "number")}
+          <label className="text-sm font-bold text-slate-700">Lifecycle mode<select className="mt-1.5 h-10 w-full rounded-md border border-slate-200 bg-white px-3" value={form.lifecycleMode} onChange={(e) => setForm({ ...form, lifecycleMode: e.target.value })}><option value="SCHEDULED">Scheduled automatically</option><option value="MANUAL">Manual status control</option></select></label>
           <label className="sm:col-span-2 text-sm font-bold text-slate-700">
             Question
             <textarea
@@ -252,8 +253,9 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
               required
             />
           </label>
-          {field("opensAt", "Opens at", "datetime-local")}
-          {field("closesAt", "Closes at", "datetime-local")}
+          {field("opensAt", "Entry opens at", "datetime-local")}
+          {field("liveAt", "Prediction closes / Live at", "datetime-local")}
+          {field("closesAt", "Contest closes at", "datetime-local")}
           <label className="sm:col-span-2 text-sm font-bold text-slate-700">
             Settlement source
             <Input
