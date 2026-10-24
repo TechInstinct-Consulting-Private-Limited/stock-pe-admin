@@ -3,11 +3,13 @@ export type Contest = {
   title: string;
   question: string;
   status: string;
+  is_demo_usdt?: boolean;
   entry_credits: number;
   prize_pool_credits: number;
   player_capacity: number;
   player_count: number;
   lifecycle_mode?: string;
+  opens_at?: string | null;
   live_at?: string | null;
   closes_at: string;
 };

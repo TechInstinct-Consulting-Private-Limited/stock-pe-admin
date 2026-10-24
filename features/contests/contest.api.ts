@@ -5,7 +5,11 @@ export function listContests(request: ApiRequest, status: string) {
   return request<{ contests?: Contest[] }>(`/admin/contests?status=${status}`);
 }
 
-export function createContest(request: ApiRequest, contest: Omit<ContestDraft, "entryCredits" | "prizePoolCredits" | "playerCapacity"> & { status: "DRAFT"; entryCredits: number; prizePoolCredits: number; playerCapacity: number }) {
+export function getContestDetails(request: ApiRequest, publicId: string) {
+  return request(`/admin/contests/${encodeURIComponent(publicId)}/details`);
+}
+
+export function createContest(request: ApiRequest, contest: Omit<ContestDraft, "entryCredits" | "prizePoolCredits" | "playerCapacity"> & { status: "DRAFT" | "SOON"; currency: "DEMO_USDT"; entryCredits: number; prizePoolCredits: number; playerCapacity: number }) {
   return request("/admin/contests", { method: "POST", body: JSON.stringify(contest) });
 }
 

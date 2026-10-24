@@ -11,11 +11,14 @@ function isAdminTab(value: string | null): value is AdminTab {
 
 export function useUrlTab() {
   const [activePage, setActivePage] = useState<AdminTab>("contests");
+  const [contestId, setContestId] = useState<string | null>(null);
 
   useEffect(() => {
     const restoreTab = () => {
       const requestedTab = new URLSearchParams(window.location.search).get("tab");
+      const requestedContest = new URLSearchParams(window.location.search).get("contest");
       setActivePage(isAdminTab(requestedTab) ? requestedTab : "contests");
+      setContestId(requestedContest || null);
     };
     restoreTab();
     window.addEventListener("popstate", restoreTab);
@@ -24,11 +27,24 @@ export function useUrlTab() {
 
   const navigateTo = (page: AdminTab) => {
     setActivePage(page);
+    setContestId(null);
     const url = new URL(window.location.href);
+    url.searchParams.delete("contest");
     if (page === "contests") url.searchParams.delete("tab");
     else url.searchParams.set("tab", page);
     window.history.pushState({}, "", url);
   };
 
-  return { activePage, navigateTo };
+  const openContest = (publicId: string) => {
+    setActivePage("contests");
+    setContestId(publicId);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("tab");
+    url.searchParams.set("contest", publicId);
+    window.history.pushState({}, "", url);
+  };
+
+  const closeContest = () => navigateTo("contests");
+
+  return { activePage, contestId, navigateTo, openContest, closeContest };
 }
