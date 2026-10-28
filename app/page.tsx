@@ -27,7 +27,9 @@ const nowInput = (hours: number) => new Date(Date.now() + hours * 3600000 - new 
 // datetime-local values have no timezone. Convert the administrator's browser-local
 // selection into an absolute UTC instant before the API receives it.
 const toUtcIso = (value: string) => new Date(value).toISOString();
-const STAGING_API_BASE = "http://localhost:5000/api/";
+// The hosted console must never default to a browser-local backend. Administrators
+// can still override this per session for local development from the login screen.
+const STAGING_API_BASE = "https://13.126.195.235.nip.io/api";
 
 function NextMilestone({ contest }: { contest: Contest }) {
   const [now, setNow] = useState(() => Date.now());
