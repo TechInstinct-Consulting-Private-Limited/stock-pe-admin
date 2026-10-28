@@ -13,6 +13,28 @@ export function createContest(request: ApiRequest, contest: Omit<ContestDraft, "
   return request("/admin/contests", { method: "POST", body: JSON.stringify(contest) });
 }
 
+export type BulkScheduleInput = {
+  instrumentCode: string;
+  startDate: string;
+  tradingDays: number;
+  opensTime: string;
+  liveTime: string;
+  closesTime: string;
+  entryCredits: number;
+  prizePoolCredits: number;
+  playerCapacity: number;
+  excludedDates: string[];
+  currency: "DEMO_USDT";
+  settlementSource: string;
+};
+
+export function createBulkScheduledContests(request: ApiRequest, input: BulkScheduleInput) {
+  return request<{ schedule: { created: Array<{ publicId: string; date: string }>; skipped: Array<{ date: string; reason: string }> } }>("/admin/contests/bulk-schedule", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export function updateContestStatus(request: ApiRequest, publicId: string, status: string) {
   return request(`/admin/contests/${publicId}/status`, { method: "PUT", body: JSON.stringify({ status }) });
 }
