@@ -50,11 +50,12 @@ export type AdminUser = {
   kycStatus: string;
   kycVerifiedAt: string | null;
   wallet: { network: string; address: string } | null;
+  demoUsdt?: { available: string; reserved: string } | null;
   adminRole: string | null;
   joinedAt: string;
 };
 
-export type StaticPageKey = "dashboard" | "deposits" | "verification" | "contracts" | "rejected" | "risks" | "users" | "wallets" | "withdrawals" | "transactions" | "health" | "settings";
+export type StaticPageKey = "dashboard" | "deposits" | "verification" | "contracts" | "rejected" | "risks" | "users" | "wallets" | "withdrawals" | "transactions" | "health" | "settings" | "notifications";
 
 export const contestStatuses = ["ALL", "DRAFT", "SOON", "OPEN", "LIVE", "CLOSED", "SETTLED", "CANCELLED"];
 

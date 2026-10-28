@@ -18,6 +18,12 @@
   scrollbar-gutter: stable;
 }
 
+/* The review-only manual payout queue is retained in the API for historical
+   records, but it is not part of the normal automatic Demo USDT contest flow. */
+main > .grid > section > section.mt-8.border-amber-200 {
+  display: none;
+}
+
 :root {
   --background: #f3f7f5;
   --foreground: #0f1f1c;
