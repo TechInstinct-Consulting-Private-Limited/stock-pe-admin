@@ -222,6 +222,32 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
       .finally(() => setLoadingStocks(false));
   }, [open, apiBase]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Optional real-time enhancement. The normal REST load/search remains the
+  // fallback if a proxy, browser, or provider does not permit WebSockets.
+  useEffect(() => {
+    if (!open) return;
+    const streamUrl = `${apiBase.replace(/^http/i, "ws").replace(/\/$/, "")}/market/live`;
+    let socket: WebSocket | undefined;
+    try {
+      socket = new WebSocket(streamUrl);
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data) as { type?: string; data?: StockIndex[] };
+          if (!Array.isArray(payload.data) || (payload.type !== "market_tick" && payload.type !== "market_snapshot")) return;
+          setIndices((current) => current.map((index) => {
+            const update = payload.data?.find((quote) => quote.rawSymbol === index.rawSymbol);
+            return update ? { ...index, ...update, type: "INDEX" } : index;
+          }));
+          setSelectedStock((current) => {
+            const update = payload.data?.find((quote) => quote.rawSymbol === current?.rawSymbol);
+            return update && current ? { ...current, ...update, type: "INDEX" } : current;
+          });
+        } catch { /* Ignore malformed optional market stream messages. */ }
+      };
+    } catch { /* The REST selector continues to work without the stream. */ }
+    return () => socket?.close();
+  }, [open, apiBase]);
+
   // Search only registered instruments that the current demo contest schema supports.
   useEffect(() => {
     if (!searchQuery.trim() || searchQuery.length < 2) return;
