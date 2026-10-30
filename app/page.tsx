@@ -284,7 +284,7 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
       instrumentCode: cleanSymbol,
       title: `${stock.name} Prediction`,
       question: `Will ${stock.name} close above ₹${stock.value} by market close?`,
-      settlementSource: `${stock.name} market data snapshot via ${stock.provider === "dhan" ? "Dhan" : stock.provider === "yahoo-finance" ? "Yahoo Finance" : "configured fallback"}`,
+      settlementSource: `${stock.name} official closing value`,
     });
   };
 
@@ -305,17 +305,17 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Create Contest from Market Data</DialogTitle>
-          <DialogDescription>Select a registered live index to auto-fill a virtual-credit demo contest.</DialogDescription>
+          <DialogTitle>Create contest</DialogTitle>
+          <DialogDescription>Select an index to auto-fill a virtual-credit demo contest.</DialogDescription>
         </DialogHeader>
 
-        {/* Live Stock / Index Selector & Search */}
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-2.5">
+        {/* Index selector: source/provider details stay internal, not in admin UI. */}
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-800">
-              ⚡ Supported live indices ({filteredList.length} shown)
+            <span className="text-sm font-extrabold text-slate-900">
+              Select index
             </span>
-            {loadingStocks && <span className="text-xs font-semibold text-emerald-600 animate-pulse">Loading live market feed...</span>}
+            {loadingStocks && <span className="text-xs font-semibold text-slate-500 animate-pulse">Refreshing prices…</span>}
           </div>
 
           {/* Search Bar & Category Filters */}
@@ -344,8 +344,8 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
             </div>
           </div>
 
-          {/* Instrument Badges */}
-          <div className="flex flex-wrap gap-2 pt-1 max-h-36 overflow-y-auto">
+          {/* Clean selectable price cards. */}
+          <div className="grid max-h-60 grid-cols-1 gap-2 overflow-y-auto pt-1 sm:grid-cols-2 md:grid-cols-3">
             {filteredList.map((stk) => {
               const isSelected = selectedStock?.symbol === stk.symbol || form.instrumentCode === stk.symbol.replace(/[^a-zA-Z0-9]/g, "");
               return (
@@ -353,47 +353,29 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
                   key={stk.symbol}
                   type="button"
                   onClick={() => handleSelectStock(stk)}
-                  className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 border ${
+                  className={`min-h-28 rounded-xl border p-3 text-left transition-all ${
                     isSelected
-                      ? "bg-emerald-600 text-white border-emerald-700 shadow-sm"
-                      : "bg-white text-slate-700 border-slate-200 hover:bg-emerald-100/50"
+                      ? "border-emerald-500 bg-white ring-1 ring-emerald-500 shadow-sm"
+                      : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/30"
                   }`}
                 >
-                  <span>{stk.name}</span>
-                  <span className={`text-[11px] font-mono ${isSelected ? "text-emerald-100" : stk.isPositive ? "text-emerald-600 font-semibold" : "text-rose-600 font-semibold"}`}>
-                    ₹{stk.value} ({stk.change})
-                  </span>
-                  {stk.provider === "dhan" && (
-                    <span className={`rounded px-1 py-0.5 text-[9px] font-black ${isSelected ? "bg-emerald-500 text-white" : "bg-emerald-100 text-emerald-800"}`}>
-                      DHAN LIVE
+                  <span className="flex items-center gap-2">
+                    <span className={`grid size-4 place-items-center rounded-full border-2 ${isSelected ? "border-emerald-600" : "border-slate-300"}`}>
+                      {isSelected && <span className="size-2 rounded-full bg-emerald-600" />}
                     </span>
-                  )}
+                    <span className="text-sm font-extrabold text-slate-900">{stk.name}</span>
+                  </span>
+                  <span className="mt-3 block text-xl font-black tracking-tight text-slate-950">₹{stk.value}</span>
+                  <span className={`mt-1 block text-sm font-bold ${stk.isPositive ? "text-emerald-600" : "text-rose-600"}`}>
+                    {stk.isPositive ? "▲" : "▼"} {stk.change}
+                  </span>
                 </button>
               );
             })}
             {filteredList.length === 0 && !loadingStocks && (
-              <p className="text-xs text-slate-500 py-2">No supported index matches this search.</p>
+              <p className="col-span-full py-3 text-xs text-slate-500">No supported index matches this search.</p>
             )}
           </div>
-
-          {/* Selected Stock Live Card */}
-          {selectedStock && (
-            <div className="mt-2 flex items-center justify-between rounded-lg bg-white p-2.5 text-xs border border-emerald-100 shadow-2xs">
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-slate-800">{selectedStock.name}</span>
-                <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-600">{selectedStock.rawSymbol}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-slate-900">₹{selectedStock.value}</span>
-                <span className={`font-semibold ${selectedStock.isPositive ? "text-emerald-600" : "text-rose-600"}`}>
-                  {selectedStock.change}
-                </span>
-                <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 uppercase">
-                  Yahoo Live
-                </span>
-              </div>
-            </div>
-          )}
         </div>
 
         <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2 mt-2">
