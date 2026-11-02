@@ -17,6 +17,7 @@ export type BulkScheduleInput = {
   instrumentCode: string;
   startDate: string;
   tradingDays: number;
+  contestType?: "DAY_OPEN" | "ONE_HOUR" | "MIDDAY" | "CLOSING" | "NEXT_DAY_CLOSE";
   opensTime: string;
   liveTime: string;
   closesTime: string;

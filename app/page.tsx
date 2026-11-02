@@ -56,7 +56,7 @@ export default function Home() {
   const [createOpen, setCreateOpen] = useState(false); const [bulkScheduleOpen, setBulkScheduleOpen] = useState(false); const [settling, setSettling] = useState<Contest | null>(null); const [closingValue, setClosingValue] = useState("");
   const [payouts, setPayouts] = useState<DemoPayout[]>([]); const [payoutLoading, setPayoutLoading] = useState(false); const [payoutContest, setPayoutContest] = useState<Contest | null>(null); const [winners, setWinners] = useState<WinnerEntry[]>([]); const [payoutAmount, setPayoutAmount] = useState("");
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]); const [usersLoading, setUsersLoading] = useState(false); const [userSearch, setUserSearch] = useState(""); const usersRequestId = useRef(0);
-  const [form, setForm] = useState<ContestDraft>({ publicId: "", title: "", question: "", instrumentCode: "NIFTY50", entryCredits: "50", prizePoolCredits: "1000", playerCapacity: "100", lifecycleMode: "SCHEDULED", opensAt: nowInput(2), liveAt: nowInput(4), closesAt: nowInput(6), settlementSource: "Demo market reference" });
+  const [form, setForm] = useState<ContestDraft>({ publicId: "", title: "", question: "", instrumentCode: "NIFTY50", entryCredits: "50", prizePoolCredits: "1000", playerCapacity: "100", lifecycleMode: "SCHEDULED", contestType: "CUSTOM", opensAt: nowInput(2), liveAt: nowInput(4), closesAt: nowInput(6), settlementSource: "Demo market reference" });
 
   const request = useMemo(() => createApiClient(apiBase, token).request, [apiBase, token]);
   const load = async (options: unknown = {}) => { const quiet = Boolean(typeof options === "object" && options !== null && "quiet" in options && options.quiet); if (!token) return; if (!quiet) setLoading(true); try { const data = await listContests(request, filter); setContests(data.contests || []); } catch (e) { if (!quiet) toast.error(e instanceof Error ? e.message : "Could not load contests"); } finally { if (!quiet) setLoading(false); } };
@@ -180,6 +180,14 @@ function Status({ status }: { status: string }) { const styles: Record<string, s
 
 type StockIndex = { symbol: string; rawSymbol: string; name: string; value: string; rawValue: number; change: string; changeValue: string; isPositive: boolean; type?: string; provider?: string };
 type MarketSearchItem = { instrumentCode: string; name: string; rawSymbol: string; quote?: { value?: string; rawValue?: number; change?: string; changeValue?: string; isPositive?: boolean; provider?: string } };
+const contestTypeOptions = [
+  ["CUSTOM", "Custom schedule"],
+  ["DAY_OPEN", "Day Open · target 9:15 AM / locks 8:59 AM"],
+  ["ONE_HOUR", "10 AM · target 10:00 AM / locks 8:59 AM"],
+  ["MIDDAY", "Midday · target 12:00 PM / locks 10:45 AM"],
+  ["CLOSING", "Closing · target 3:30 PM / locks 9:00 AM"],
+  ["NEXT_DAY_CLOSE", "Next-day close · locks previous close"],
+] as const;
 
 function toStockIndex(item: MarketSearchItem): StockIndex {
   return {
@@ -386,6 +394,7 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
           {field("prizePoolCredits", "Prize pool (Demo USDT, whole units)", "number")}
           {field("playerCapacity", "Player capacity", "number")}
           <label className="text-sm font-bold text-slate-700">Lifecycle mode<select className="mt-1.5 h-10 w-full rounded-md border border-slate-200 bg-white px-3" value={form.lifecycleMode} onChange={(e) => setForm({ ...form, lifecycleMode: e.target.value })}><option value="SCHEDULED">Scheduled automatically</option><option value="MANUAL">Manual status control</option></select></label>
+          <label className="text-sm font-bold text-slate-700">Contest type<select className="mt-1.5 h-10 w-full rounded-md border border-slate-200 bg-white px-3" value={form.contestType} onChange={(e) => setForm({ ...form, contestType: e.target.value })}>{contestTypeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <label className="sm:col-span-2 text-sm font-bold text-slate-700">
             Question
             <textarea

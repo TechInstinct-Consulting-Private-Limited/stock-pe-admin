@@ -9,6 +9,7 @@ export type Contest = {
   player_capacity: number;
   player_count: number;
   lifecycle_mode?: string;
+  contest_type?: string;
   opens_at?: string | null;
   live_at?: string | null;
   closes_at: string;
@@ -23,6 +24,7 @@ export type ContestDraft = {
   prizePoolCredits: string;
   playerCapacity: string;
   lifecycleMode: string;
+  contestType: string;
   opensAt: string;
   liveAt: string;
   closesAt: string;
