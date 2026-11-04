@@ -32,7 +32,7 @@ const nowInput = (hours: number) => new Date(Date.now() + hours * 3600000 - new 
 const toUtcIso = (value: string) => new Date(value).toISOString();
 // The hosted console must never default to a browser-local backend. Administrators
 // can still override this per session for local development from the login screen.
-const STAGING_API_BASE = "http://localhost:5000/api/";
+const STAGING_API_BASE = "https://13.126.195.235.nip.io/api/";
 
 export default function Home() {
   const { mounted, apiBase, setApiBase, token, beginSession, endSession } = useAdminSession(STAGING_API_BASE);
