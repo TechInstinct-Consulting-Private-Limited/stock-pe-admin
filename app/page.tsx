@@ -374,6 +374,10 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
           {field("entryCredits", "Entry amount (Demo USDT, whole units)", "number")}
           {field("prizePoolCredits", "Prize pool (Demo USDT, whole units)", "number")}
           {field("playerCapacity", "Player capacity", "number")}
+          <div className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+            <p className="font-extrabold">Rank-wise prize distribution</p>
+            <p className="mt-1 text-amber-900/80">The Figma prize schedule is applied automatically at settlement: 1st 40%, 2nd 20%, 3rd 15%, ranks 4–5 10%, ranks 6–10 8%, ranks 11–50 5%, and ranks 51–100 2%.</p>
+          </div>
           <label className="text-sm font-bold text-slate-700">Lifecycle mode<select className="mt-1.5 h-10 w-full rounded-md border border-slate-200 bg-white px-3" value={form.lifecycleMode} onChange={(e) => setForm({ ...form, lifecycleMode: e.target.value })}><option value="SCHEDULED">Scheduled automatically</option><option value="MANUAL">Manual status control</option></select></label>
           <label className="text-sm font-bold text-slate-700">Contest type<select className="mt-1.5 h-10 w-full rounded-md border border-slate-200 bg-white px-3" value={form.contestType} onChange={(e) => setForm({ ...form, contestType: e.target.value })}>{contestTypeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <label className="sm:col-span-2 text-sm font-bold text-slate-700">

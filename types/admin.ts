@@ -13,6 +13,14 @@ export type Contest = {
   opens_at?: string | null;
   live_at?: string | null;
   closes_at: string;
+  prize_distribution?: PrizeDistributionTier[];
+};
+
+export type PrizeDistributionTier = {
+  label: string;
+  startRank: number;
+  endRank: number;
+  percent: number;
 };
 
 export type ContestDraft = {
