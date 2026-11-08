@@ -9,9 +9,18 @@ export type Contest = {
   player_capacity: number;
   player_count: number;
   lifecycle_mode?: string;
+  contest_type?: string;
   opens_at?: string | null;
   live_at?: string | null;
   closes_at: string;
+  prize_distribution?: PrizeDistributionTier[];
+};
+
+export type PrizeDistributionTier = {
+  label: string;
+  startRank: number;
+  endRank: number;
+  percent: number;
 };
 
 export type ContestDraft = {
@@ -23,6 +32,7 @@ export type ContestDraft = {
   prizePoolCredits: string;
   playerCapacity: string;
   lifecycleMode: string;
+  contestType: string;
   opensAt: string;
   liveAt: string;
   closesAt: string;
@@ -50,11 +60,12 @@ export type AdminUser = {
   kycStatus: string;
   kycVerifiedAt: string | null;
   wallet: { network: string; address: string } | null;
+  demoUsdt?: { available: string; reserved: string } | null;
   adminRole: string | null;
   joinedAt: string;
 };
 
-export type StaticPageKey = "dashboard" | "deposits" | "verification" | "contracts" | "rejected" | "risks" | "users" | "wallets" | "withdrawals" | "transactions" | "health" | "settings";
+export type StaticPageKey = "dashboard" | "deposits" | "verification" | "contracts" | "rejected" | "risks" | "users" | "wallets" | "withdrawals" | "transactions" | "health" | "settings" | "notifications";
 
 export const contestStatuses = ["ALL", "DRAFT", "SOON", "OPEN", "LIVE", "CLOSED", "SETTLED", "CANCELLED"];
 

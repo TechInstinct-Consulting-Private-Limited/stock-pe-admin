@@ -14,7 +14,13 @@ import { LoginScreen } from "@/features/auth/LoginScreen";
 import { createDemoPayout, listDemoPayouts, updateDemoPayout } from "@/features/payouts/payout.api";
 import { listAdminUsers } from "@/features/users/user.api";
 import { UsersPage } from "@/features/users/UsersPage";
+import { WalletsPage } from "@/features/users/WalletsPage";
+import { User360PreviewPage } from "@/features/users/User360PreviewPage";
 import { ContestDetailsPage } from "@/features/contests/ContestDetailsPage";
+import { NotificationsPage } from "@/features/notifications/NotificationsPage";
+import { BulkScheduleDialog } from "@/features/contests/BulkScheduleDialog";
+import { ContestKanbanView } from "@/features/contests/ContestKanbanView";
+import { ContestTableView } from "@/features/contests/ContestTableView";
 import { useAdminSession } from "@/hooks/useAdminSession";
 import { useUrlTab } from "@/hooks/useUrlTab";
 import { createApiClient } from "@/services/api-client";
@@ -24,33 +30,19 @@ const nowInput = (hours: number) => new Date(Date.now() + hours * 3600000 - new 
 // datetime-local values have no timezone. Convert the administrator's browser-local
 // selection into an absolute UTC instant before the API receives it.
 const toUtcIso = (value: string) => new Date(value).toISOString();
-const STAGING_API_BASE = "https://13.126.195.235.nip.io/api";
-
-function NextMilestone({ contest }: { contest: Contest }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-  if (contest.status === "CLOSED") return <span>Awaiting settlement</span>;
-  if (contest.status === "SETTLED") return <span>Settled</span>;
-  const target = contest.status === "SOON" ? contest.opens_at : contest.status === "OPEN" ? contest.live_at || contest.closes_at : contest.status === "LIVE" ? contest.closes_at : null;
-  const label = contest.status === "SOON" ? "Opens in" : contest.status === "OPEN" ? "Entry closes in" : "Contest closes in";
-  if (!target || !Number.isFinite(new Date(target).getTime())) return <span>—</span>;
-  const seconds = Math.max(0, Math.floor((new Date(target).getTime() - now) / 1000));
-  const time = [Math.floor(seconds / 3600), Math.floor(seconds % 3600 / 60), seconds % 60].map((part) => String(part).padStart(2, "0")).join(":");
-  return <span>{label} {time}</span>;
-}
+// The hosted console must never default to a browser-local backend. Administrators
+// can still override this per session for local development from the login screen.
+const STAGING_API_BASE = "https://13.126.195.235.nip.io/api/";
 
 export default function Home() {
   const { mounted, apiBase, setApiBase, token, beginSession, endSession } = useAdminSession(STAGING_API_BASE);
-  const { activePage, contestId, navigateTo, openContest, closeContest } = useUrlTab();
+  const { activePage, contestId, userId, navigateTo, openContest, closeContest, openUser, closeUser } = useUrlTab();
   const [mobile, setMobile] = useState(""); const [password, setPassword] = useState(""); const [otp, setOtp] = useState(""); const [otpRequested, setOtpRequested] = useState(false);
-  const [filter, setFilter] = useState("ALL"); const [contests, setContests] = useState<Contest[]>([]); const [loading, setLoading] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false); const [settling, setSettling] = useState<Contest | null>(null); const [closingValue, setClosingValue] = useState("");
+  const [filter, setFilter] = useState("ALL"); const [contestView, setContestView] = useState<"table" | "kanban">("table"); const [contests, setContests] = useState<Contest[]>([]); const [loading, setLoading] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false); const [bulkScheduleOpen, setBulkScheduleOpen] = useState(false); const [settling, setSettling] = useState<Contest | null>(null); const [closingValue, setClosingValue] = useState("");
   const [payouts, setPayouts] = useState<DemoPayout[]>([]); const [payoutLoading, setPayoutLoading] = useState(false); const [payoutContest, setPayoutContest] = useState<Contest | null>(null); const [winners, setWinners] = useState<WinnerEntry[]>([]); const [payoutAmount, setPayoutAmount] = useState("");
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]); const [usersLoading, setUsersLoading] = useState(false); const [userSearch, setUserSearch] = useState(""); const usersRequestId = useRef(0);
-  const [form, setForm] = useState<ContestDraft>({ publicId: "", title: "", question: "", instrumentCode: "NIFTY50", entryCredits: "50", prizePoolCredits: "1000", playerCapacity: "100", lifecycleMode: "SCHEDULED", opensAt: nowInput(2), liveAt: nowInput(4), closesAt: nowInput(6), settlementSource: "Demo market reference" });
+  const [form, setForm] = useState<ContestDraft>({ publicId: "", title: "", question: "", instrumentCode: "NIFTY50", entryCredits: "50", prizePoolCredits: "1000", playerCapacity: "100", lifecycleMode: "SCHEDULED", contestType: "CUSTOM", opensAt: nowInput(2), liveAt: nowInput(4), closesAt: nowInput(6), settlementSource: "Demo market reference" });
 
   const request = useMemo(() => createApiClient(apiBase, token).request, [apiBase, token]);
   const load = async (options: unknown = {}) => { const quiet = Boolean(typeof options === "object" && options !== null && "quiet" in options && options.quiet); if (!token) return; if (!quiet) setLoading(true); try { const data = await listContests(request, filter); setContests(data.contests || []); } catch (e) { if (!quiet) toast.error(e instanceof Error ? e.message : "Could not load contests"); } finally { if (!quiet) setLoading(false); } };
@@ -65,7 +57,7 @@ export default function Home() {
     return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", refreshIfVisible); };
   }, [mounted, token, activePage, filter, request]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!mounted || !token) return; void loadPayouts(); }, [token, mounted]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (!mounted || !token || activePage !== "users") return; const timer = window.setTimeout(() => { void loadUsers(); }, userSearch.trim().length >= 2 ? 300 : 0); return () => window.clearTimeout(timer); }, [token, mounted, activePage, userSearch]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!mounted || !token || (activePage !== "users" && !userId)) return; const timer = window.setTimeout(() => { void loadUsers(); }, userSearch.trim().length >= 2 ? 300 : 0); return () => window.clearTimeout(timer); }, [token, mounted, activePage, userId, userSearch]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const requestOtp = async (event: FormEvent) => { event.preventDefault(); try { await requestAdminOtp(request, mobile, password); setOtpRequested(true); toast.success("OTP sent. Enter it to continue."); } catch (e) { toast.error(e instanceof Error ? e.message : "Sign-in failed"); } };
   const verifyOtp = async (event: FormEvent) => { event.preventDefault(); try { const data = await verifyAdminOtp(request, mobile, otp); beginSession(data.token); toast.success("Admin session started"); } catch (e) { toast.error(e instanceof Error ? e.message : "OTP verification failed"); } };
@@ -80,17 +72,14 @@ export default function Home() {
   if (!mounted) return <div className="min-h-screen bg-[#071d1a]" />;
   if (!token) return <LoginScreen apiBase={apiBase} setApiBase={setApiBase} mobile={mobile} setMobile={setMobile} password={password} setPassword={setPassword} otp={otp} setOtp={setOtp} otpRequested={otpRequested} requestOtp={requestOtp} verifyOtp={verifyOtp} />;
   if (contestId) return <ContestDetailsPage publicId={contestId} request={request} onBack={closeContest} />;
-  if (activePage !== "contests") return <StaticAdminWorkspace activePage={activePage} onNavigate={navigateTo} onSignOut={endSession} users={adminUsers} usersLoading={usersLoading} userSearch={userSearch} setUserSearch={setUserSearch} onRefreshUsers={loadUsers} />;
-  return <main className="min-h-screen bg-[#f3f7f5] text-slate-950"><Toaster richColors position="top-right" /><div className="grid min-h-screen lg:grid-cols-[248px_1fr]"><aside className="border-b border-emerald-950/20 bg-[#071d1a] px-5 py-6 text-emerald-50 lg:border-b-0 lg:border-r"><div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-xl bg-emerald-400 text-[#071d1a]"><Activity size={21} /></div><div><p className="text-lg font-black">MarketPe</p><p className="text-xs text-emerald-100/60">Admin Console</p></div></div><nav className="mt-9 space-y-2"><Nav icon={<Gauge size={18} />} label="Dashboard" onClick={() => navigateTo("dashboard")} /><Nav active icon={<ClipboardList size={18} />} label="Contest operations" onClick={() => navigateTo("contests")} /><PreviewNavGroups activePage="contests" onNavigate={navigateTo} /></nav><div className="mt-8 rounded-xl border border-emerald-300/15 bg-emerald-400/5 p-4 text-sm leading-5 text-emerald-100/75"><b className="text-emerald-200">Demo environment</b><br />Virtual credits only. No USDT or real-money action is enabled.</div><Button variant="ghost" className="mt-8 w-full justify-start text-emerald-100 hover:bg-emerald-50/10 hover:text-white" onClick={endSession}><LogOut size={17} /> Sign out</Button></aside><section className="min-w-0 p-5 md:p-8 lg:p-10"><header className="flex flex-col justify-between gap-5 border-b border-slate-200 pb-7 sm:flex-row sm:items-end"><div><p className="text-sm font-bold uppercase tracking-[.16em] text-emerald-700">Operations / contests</p><h1 className="mt-2 text-3xl font-black tracking-tight">Contest control room</h1><p className="mt-2 text-base text-slate-600">Create, launch, close, and settle virtual-credit prediction contests with real-time stock feeds.</p></div><Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => setCreateOpen(true)}><Plus size={18} /> Create contest</Button></header><div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Open contests" value={stats.open} icon={<ClipboardList />} /><Metric label="Live contests" value={stats.live} icon={<Activity />} /><Metric label="Entries shown" value={stats.entries.toLocaleString("en-IN")} icon={<Users />} /><Metric label="Demo prize pool" value={`${stats.pool.toLocaleString("en-IN")} cr`} icon={<Trophy />} /></div><section className="mt-8 rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-4 border-b border-slate-100 p-5 md:flex-row md:items-center md:justify-between"><div><h2 className="text-lg font-extrabold">Contests</h2><p className="mt-1 text-sm text-slate-500">Only valid lifecycle transitions are available.</p></div><Button variant="outline" onClick={load} disabled={loading}><RefreshCw className={loading ? "animate-spin" : ""} size={16} /> Refresh</Button></div><div className="flex gap-2 overflow-auto border-b border-slate-100 px-5 py-3">{statuses.map((status) => <button key={status} onClick={() => setFilter(status)} className={`rounded-full px-3 py-1.5 text-sm font-bold ${filter === status ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-emerald-50"}`}>{status}</button>)}</div><Table><TableHeader><TableRow><TableHead>Contest</TableHead><TableHead>Status</TableHead><TableHead>Next milestone</TableHead><TableHead>Entries</TableHead><TableHead>Demo pool</TableHead><TableHead>Closes</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader><TableBody>{contests.map((contest) => <TableRow key={contest.public_id}><TableCell><p className="font-bold">{contest.title}</p><p className="max-w-[260px] truncate text-xs text-slate-500">{contest.question}</p></TableCell><TableCell><Status status={contest.status} /></TableCell><TableCell><NextMilestone contest={contest} /></TableCell><TableCell>{contest.player_count.toLocaleString("en-IN")} / {contest.player_capacity.toLocaleString("en-IN")}</TableCell><TableCell>{contest.prize_pool_credits.toLocaleString("en-IN")} {contest.is_demo_usdt ? "Demo USDT" : "credits"}</TableCell><TableCell className="text-slate-600">{new Date(contest.closes_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</TableCell><TableCell className="text-right">
-  <div className="flex flex-wrap justify-end gap-2">
-    <Button type="button" size="sm" variant="outline" onClick={() => openContest(contest.public_id)}>View Details</Button>
-    {contest.status === "CLOSED" ? <Button size="sm" onClick={() => setSettling(contest)}>Settle</Button> : contest.status === "SETTLED" ? <Button size="sm" variant="outline" onClick={() => openPayout(contest)}>Test payout</Button> : nextStatus[contest.status] ? <Button size="sm" variant="outline" onClick={() => advance(contest)}>{nextStatus[contest.status]} <ChevronRight size={15} /></Button> : <span className="text-xs font-bold text-slate-400">No action</span>}
-  </div>
-</TableCell></TableRow>)}{!loading && contests.length === 0 && <TableRow><TableCell colSpan={7} className="py-14 text-center text-slate-500">No contests in this status.</TableCell></TableRow>}</TableBody></Table></section><section className="mt-8 rounded-2xl border border-amber-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-amber-100 p-5"><div><h2 className="text-lg font-extrabold">Demo test payout queue</h2><p className="mt-1 text-sm text-slate-500">Review-only records. No USDT, blockchain transaction, or ledger credit is created.</p></div><Button variant="outline" onClick={loadPayouts} disabled={payoutLoading}><RefreshCw className={payoutLoading ? "animate-spin" : ""} size={16} /> Refresh</Button></div><Table><TableHeader><TableRow><TableHead>Contest / user</TableHead><TableHead>Demo amount</TableHead><TableHead>Destination</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader><TableBody>{payouts.map((payout) => <TableRow key={payout.id}><TableCell><p className="font-bold">{payout.title}</p><p className="text-xs text-slate-500">{payout.mobile}</p></TableCell><TableCell>{payout.amount_usdt} Demo USDT</TableCell><TableCell className="font-mono text-xs">{payout.wallet_address}</TableCell><TableCell><Status status={payout.status} /></TableCell><TableCell className="text-right">{payout.status === "PENDING_REVIEW" ? <div className="flex justify-end gap-2"><Button size="sm" onClick={() => changePayout(payout, "approve")}>Approve test</Button><Button size="sm" variant="outline" onClick={() => changePayout(payout, "reject")}>Reject</Button></div> : payout.status === "APPROVED" ? <div className="flex justify-end gap-2"><Button size="sm" onClick={() => changePayout(payout, "complete")}>Mark complete</Button><Button size="sm" variant="outline" onClick={() => changePayout(payout, "reject")}>Reject</Button></div> : <span className="text-xs font-bold text-slate-400">{payout.simulated_tx_hash ? "Simulated" : "No action"}</span>}</TableCell></TableRow>)}{!payoutLoading && payouts.length === 0 && <TableRow><TableCell colSpan={5} className="py-10 text-center text-slate-500">No demo payouts yet.</TableCell></TableRow>}</TableBody></Table></section></section></div><CreateDialog open={createOpen} onOpenChange={setCreateOpen} form={form} setForm={setForm} onSubmit={create} apiBase={apiBase} /><SettleDialog contest={settling} onOpenChange={(open) => !open && setSettling(null)} closingValue={closingValue} setClosingValue={setClosingValue} onSubmit={settle} /><PayoutDialog contest={payoutContest} winners={winners} amount={payoutAmount} setAmount={setPayoutAmount} onOpenChange={(open) => !open && setPayoutContest(null)} onCreate={createPayout} /></main>;
+  if (userId) return <User360PreviewPage user={adminUsers.find((user) => user.id === userId)} request={request} onBack={closeUser} />;
+  if (activePage === "notifications") return <NotificationsPage request={request} onBack={() => navigateTo("contests")} />;
+  if (activePage !== "contests") return <StaticAdminWorkspace activePage={activePage} onNavigate={navigateTo} onSignOut={endSession} request={request} users={adminUsers} usersLoading={usersLoading} userSearch={userSearch} setUserSearch={setUserSearch} onRefreshUsers={loadUsers} onViewUser={openUser} />;
+  return <main className="min-h-screen bg-[#f3f7f5] text-slate-950"><Toaster richColors position="top-right" /><div className="grid min-h-screen lg:grid-cols-[248px_1fr]"><aside className="border-b border-emerald-950/20 bg-[#071d1a] px-5 py-6 text-emerald-50 lg:border-b-0 lg:border-r"><div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-xl bg-emerald-400 text-[#071d1a]"><Activity size={21} /></div><div><p className="text-lg font-black">MarketPe</p><p className="text-xs text-emerald-100/60">Admin Console</p></div></div><nav className="mt-9 space-y-2"><Nav icon={<Gauge size={18} />} label="Dashboard" onClick={() => navigateTo("dashboard")} /><Nav active icon={<ClipboardList size={18} />} label="Contest operations" onClick={() => navigateTo("contests")} /><PreviewNavGroups activePage="contests" onNavigate={navigateTo} /></nav><div className="mt-8 rounded-xl border border-emerald-300/15 bg-emerald-400/5 p-4 text-sm leading-5 text-emerald-100/75"><b className="text-emerald-200">Demo environment</b><br />Virtual credits only. No USDT or real-money action is enabled.</div><Button variant="ghost" className="mt-8 w-full justify-start text-emerald-100 hover:bg-emerald-50/10 hover:text-white" onClick={endSession}><LogOut size={17} /> Sign out</Button></aside><section className="min-w-0 p-5 md:p-8 lg:p-10"><header className="flex flex-col justify-between gap-5 border-b border-slate-200 pb-7 sm:flex-row sm:items-end"><div><p className="text-sm font-bold uppercase tracking-[.16em] text-emerald-700">Operations / contests</p><h1 className="mt-2 text-3xl font-black tracking-tight">Contest control room</h1><p className="mt-2 text-base text-slate-600">Create, launch, close, and settle virtual-credit prediction contests with real-time stock feeds.</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setBulkScheduleOpen(true)}>Schedule multiple</Button><Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => setCreateOpen(true)}><Plus size={18} /> Create contest</Button></div></header><div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Open contests" value={stats.open} icon={<ClipboardList />} /><Metric label="Live contests" value={stats.live} icon={<Activity />} /><Metric label="Entries shown" value={stats.entries.toLocaleString("en-IN")} icon={<Users />} /><Metric label="Demo prize pool" value={`${stats.pool.toLocaleString("en-IN")} cr`} icon={<Trophy />} /></div><section className="mt-8 rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-4 border-b border-slate-100 p-5 md:flex-row md:items-center md:justify-between"><div><h2 className="text-lg font-extrabold">Contests</h2><p className="mt-1 text-sm text-slate-500">Only valid lifecycle transitions are available.</p></div><div className="flex flex-wrap items-center gap-2"><div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1"><button type="button" onClick={() => setContestView("table")} className={`rounded-md px-3 py-1.5 text-xs font-black ${contestView === "table" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>Table</button><button type="button" onClick={() => setContestView("kanban")} className={`rounded-md px-3 py-1.5 text-xs font-black ${contestView === "kanban" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>Kanban</button></div><Button variant="outline" onClick={load} disabled={loading}><RefreshCw className={loading ? "animate-spin" : ""} size={16} /> Refresh</Button></div></div><div className="flex gap-2 overflow-auto border-b border-slate-100 px-5 py-3">{statuses.map((status) => <button key={status} onClick={() => setFilter(status)} className={`rounded-full px-3 py-1.5 text-sm font-bold ${filter === status ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-emerald-50"}`}>{status}</button>)}</div>{contestView === "table" ? <ContestTableView contests={contests} loading={loading} onViewDetails={openContest} onAdvance={advance} onSettle={setSettling} /> : <ContestKanbanView contests={contests} onViewDetails={openContest} onAdvance={advance} onSettle={setSettling} />}</section><section className="mt-8 rounded-2xl border border-amber-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-amber-100 p-5"><div><h2 className="text-lg font-extrabold">Demo test payout queue</h2><p className="mt-1 text-sm text-slate-500">Review-only records. No USDT, blockchain transaction, or ledger credit is created.</p></div><Button variant="outline" onClick={loadPayouts} disabled={payoutLoading}><RefreshCw className={payoutLoading ? "animate-spin" : ""} size={16} /> Refresh</Button></div><Table><TableHeader><TableRow><TableHead>Contest / user</TableHead><TableHead>Demo amount</TableHead><TableHead>Destination</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader><TableBody>{payouts.map((payout) => <TableRow key={payout.id}><TableCell><p className="font-bold">{payout.title}</p><p className="text-xs text-slate-500">{payout.mobile}</p></TableCell><TableCell>{payout.amount_usdt} Demo USDT</TableCell><TableCell className="font-mono text-xs">{payout.wallet_address}</TableCell><TableCell><Status status={payout.status} /></TableCell><TableCell className="text-right">{payout.status === "PENDING_REVIEW" ? <div className="flex justify-end gap-2"><Button size="sm" onClick={() => changePayout(payout, "approve")}>Approve test</Button><Button size="sm" variant="outline" onClick={() => changePayout(payout, "reject")}>Reject</Button></div> : payout.status === "APPROVED" ? <div className="flex justify-end gap-2"><Button size="sm" onClick={() => changePayout(payout, "complete")}>Mark complete</Button><Button size="sm" variant="outline" onClick={() => changePayout(payout, "reject")}>Reject</Button></div> : <span className="text-xs font-bold text-slate-400">{payout.simulated_tx_hash ? "Simulated" : "No action"}</span>}</TableCell></TableRow>)}{!payoutLoading && payouts.length === 0 && <TableRow><TableCell colSpan={5} className="py-10 text-center text-slate-500">No demo payouts yet.</TableCell></TableRow>}</TableBody></Table></section></section></div><CreateDialog open={createOpen} onOpenChange={setCreateOpen} form={form} setForm={setForm} onSubmit={create} apiBase={apiBase} /><BulkScheduleDialog open={bulkScheduleOpen} onOpenChange={setBulkScheduleOpen} request={request} apiBase={apiBase} onCreated={() => void load()} /><SettleDialog contest={settling} onOpenChange={(open) => !open && setSettling(null)} closingValue={closingValue} setClosingValue={setClosingValue} onSubmit={settle} /><PayoutDialog contest={payoutContest} winners={winners} amount={payoutAmount} setAmount={setPayoutAmount} onCreate={createPayout} /></main>;
 }
 
 function isAdminTab(value: string | null): value is StaticPageKey | "contests" {
-  return value === "contests" || value === "dashboard" || value === "deposits" || value === "verification" || value === "contracts" || value === "rejected" || value === "risks" || value === "users" || value === "wallets" || value === "withdrawals" || value === "transactions" || value === "health" || value === "settings";
+  return value === "contests" || value === "dashboard" || value === "deposits" || value === "verification" || value === "contracts" || value === "rejected" || value === "risks" || value === "users" || value === "wallets" || value === "withdrawals" || value === "transactions" || value === "health" || value === "settings" || value === "notifications";
 }
 
 const staticPages: Record<StaticPageKey, { label: string; eyebrow: string; title: string; description: string }> = {
@@ -106,6 +95,7 @@ const staticPages: Record<StaticPageKey, { label: string; eyebrow: string; title
   transactions: { label: "All Transactions", eyebrow: "Deposits & transactions", title: "Transaction Explorer & TxID Search", description: "Search every deposit, withdrawal and verification decision" },
   health: { label: "Network & API Health", eyebrow: "System & settings", title: "Network & API Health", description: "Fail-closed monitoring for nodes, indexers and risk services" },
   settings: { label: "Settings", eyebrow: "System & settings", title: "Settings, Roles & Audit Logs", description: "Security configuration - approvals - complete administrative history" },
+  notifications: { label: "Notifications", eyebrow: "Operations", title: "Notification Center", description: "In-app delivery history and controlled broadcast messages" },
 };
 
 function PreviewNavGroups({ activePage, onNavigate }: { activePage: StaticPageKey | "contests"; onNavigate: (page: StaticPageKey) => void }) {
@@ -114,14 +104,19 @@ function PreviewNavGroups({ activePage, onNavigate }: { activePage: StaticPageKe
     { heading: "Withdrawals", links: [{ key: "withdrawals", label: "Withdrawal Requests" }] },
     { heading: "Users & KYC", links: [{ key: "users", label: "Users" }, { key: "wallets", label: "Wallets" }] },
     { heading: "Risk & compliance", links: [{ key: "risks", label: "Risk Alerts" }] },
-    { heading: "System & settings", links: [{ key: "contracts", label: "USDT Contracts" }, { key: "health", label: "Network & API Health" }, { key: "settings", label: "Settings" }] },
+    { heading: "System & settings", links: [{ key: "notifications", label: "Notifications" }, { key: "contracts", label: "USDT Contracts" }, { key: "health", label: "Network & API Health" }, { key: "settings", label: "Settings" }] },
   ];
   return <div className="mt-2 space-y-1">{groups.map((group) => <details key={group.heading} className="group rounded-xl"><summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2 text-xs font-black uppercase tracking-wide text-emerald-100/60 hover:bg-emerald-50/10"><span>{group.heading}</span><ChevronRight size={14} className="transition-transform group-open:rotate-90" /></summary><div className="space-y-1 pb-1">{group.links.map((link) => <button key={link.key} type="button" onClick={() => onNavigate(link.key)} className={`block w-full rounded-lg px-4 py-2 text-left text-sm font-bold transition ${activePage === link.key ? "bg-emerald-400 text-[#06201b]" : "text-emerald-100/70 hover:bg-emerald-50/10 hover:text-white"}`}>{link.label}</button>)}</div></details>)}</div>;
 }
 
-function StaticAdminWorkspace({ activePage, onNavigate, onSignOut, users, usersLoading, userSearch, setUserSearch, onRefreshUsers }: { activePage: StaticPageKey; onNavigate: (page: StaticPageKey | "contests") => void; onSignOut: () => void; users: AdminUser[]; usersLoading: boolean; userSearch: string; setUserSearch: (value: string) => void; onRefreshUsers: () => void }) {
+function StaticAdminWorkspace({ activePage, onNavigate, onSignOut, request, users, usersLoading, userSearch, setUserSearch, onRefreshUsers, onViewUser }: { activePage: StaticPageKey; onNavigate: (page: StaticPageKey | "contests") => void; onSignOut: () => void; request: ReturnType<typeof createApiClient>["request"]; users: AdminUser[]; usersLoading: boolean; userSearch: string; setUserSearch: (value: string) => void; onRefreshUsers: () => void; onViewUser: (userId: string) => void }) {
+  if (activePage === "wallets") return <WalletDirectoryWorkspace onNavigate={onNavigate} onSignOut={onSignOut} request={request} />;
   const page = staticPages[activePage];
-  return <main className="min-h-screen bg-[#f3f7f5] text-slate-950"><div className="grid min-h-screen lg:grid-cols-[248px_1fr]"><aside className="border-b border-emerald-950/20 bg-[#071d1a] px-5 py-6 text-emerald-50 lg:border-b-0 lg:border-r"><div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-xl bg-emerald-400 text-[#071d1a]"><Activity size={21} /></div><div><p className="text-lg font-black">MarketPe</p><p className="text-xs text-emerald-100/60">Admin Console</p></div></div><nav className="mt-9 space-y-2"><Nav active={activePage === "dashboard"} icon={<Gauge size={18} />} label="Dashboard" onClick={() => onNavigate("dashboard")} /><Nav icon={<ClipboardList size={18} />} label="Contest operations" onClick={() => onNavigate("contests")} /><PreviewNavGroups activePage={activePage} onNavigate={onNavigate} /></nav><div className="mt-8 rounded-xl border border-amber-300/20 bg-amber-300/5 p-4 text-sm leading-5 text-amber-50/80"><b className="text-amber-200">Static preview</b><br />Sample data only. No payment, wallet, KYC, or compliance action is available.</div><Button variant="ghost" className="mt-8 w-full justify-start text-emerald-100 hover:bg-emerald-50/10 hover:text-white" onClick={onSignOut}><LogOut size={17} /> Sign out</Button></aside><section className="min-w-0 p-5 md:p-8 lg:p-10"><header className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-7 sm:flex-row sm:items-start"><div><p className="text-xs font-black uppercase tracking-[.16em] text-emerald-600">{page.eyebrow}</p><h1 className="mt-2 text-3xl font-black tracking-tight">{page.title}</h1><p className="mt-2 text-sm text-slate-500">{page.description}</p></div><div className="flex gap-3"><Button variant="outline" className="bg-white">All Networks</Button><Button variant="outline" className="bg-white">Admin</Button></div></header><div className="mt-5 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900"><b>{activePage === "users" ? "Live admin data:" : "Static design preview:"}</b> {activePage === "users" ? "Read-only user, KYC, and wallet-link data is loaded from the backend." : "This PDF-based page has no API calls and no live operational controls yet."}</div><StaticPageContent page={activePage} users={users} usersLoading={usersLoading} userSearch={userSearch} setUserSearch={setUserSearch} onRefreshUsers={onRefreshUsers} /></section></div></main>;
+  return <main className="min-h-screen bg-[#f3f7f5] text-slate-950"><div className="grid min-h-screen lg:grid-cols-[248px_1fr]"><aside className="border-b border-emerald-950/20 bg-[#071d1a] px-5 py-6 text-emerald-50 lg:border-b-0 lg:border-r"><div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-xl bg-emerald-400 text-[#071d1a]"><Activity size={21} /></div><div><p className="text-lg font-black">MarketPe</p><p className="text-xs text-emerald-100/60">Admin Console</p></div></div><nav className="mt-9 space-y-2"><Nav active={activePage === "dashboard"} icon={<Gauge size={18} />} label="Dashboard" onClick={() => onNavigate("dashboard")} /><Nav icon={<ClipboardList size={18} />} label="Contest operations" onClick={() => onNavigate("contests")} /><PreviewNavGroups activePage={activePage} onNavigate={onNavigate} /></nav><div className="mt-8 rounded-xl border border-amber-300/20 bg-amber-300/5 p-4 text-sm leading-5 text-amber-50/80"><b className="text-amber-200">Static preview</b><br />Sample data only. No payment, wallet, KYC, or compliance action is available.</div><Button variant="ghost" className="mt-8 w-full justify-start text-emerald-100 hover:bg-emerald-50/10 hover:text-white" onClick={onSignOut}><LogOut size={17} /> Sign out</Button></aside><section className="min-w-0 p-5 md:p-8 lg:p-10"><header className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-7 sm:flex-row sm:items-start"><div><p className="text-xs font-black uppercase tracking-[.16em] text-emerald-600">{page.eyebrow}</p><h1 className="mt-2 text-3xl font-black tracking-tight">{page.title}</h1><p className="mt-2 text-sm text-slate-500">{page.description}</p></div><div className="flex gap-3"><Button variant="outline" className="bg-white">All Networks</Button><Button variant="outline" className="bg-white">Admin</Button></div></header><div className="mt-5 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900"><b>{activePage === "users" ? "Live admin data:" : "Static design preview:"}</b> {activePage === "users" ? "Directory data is live; User 360° details use preview data until Phase 2 APIs are connected." : "This PDF-based page has no API calls and no live operational controls yet."}</div><StaticPageContent page={activePage} users={users} usersLoading={usersLoading} userSearch={userSearch} setUserSearch={setUserSearch} onRefreshUsers={onRefreshUsers} onViewUser={onViewUser} /></section></div></main>;
+}
+
+function WalletDirectoryWorkspace({ onNavigate, onSignOut, request }: { onNavigate: (page: StaticPageKey | "contests") => void; onSignOut: () => void; request: ReturnType<typeof createApiClient>["request"] }) {
+  return <main className="min-h-screen bg-[#f3f7f5] text-slate-950"><div className="grid min-h-screen lg:grid-cols-[248px_1fr]"><aside className="border-b border-emerald-950/20 bg-[#071d1a] px-5 py-6 text-emerald-50 lg:border-b-0 lg:border-r"><div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-xl bg-emerald-400 text-[#071d1a]"><Activity size={21} /></div><div><p className="text-lg font-black">MarketPe</p><p className="text-xs text-emerald-100/60">Admin Console</p></div></div><nav className="mt-9 space-y-2"><Nav icon={<Gauge size={18} />} label="Dashboard" onClick={() => onNavigate("dashboard")} /><Nav icon={<ClipboardList size={18} />} label="Contest operations" onClick={() => onNavigate("contests")} /><PreviewNavGroups activePage="wallets" onNavigate={onNavigate} /></nav><div className="mt-8 rounded-xl border border-emerald-300/15 bg-emerald-400/5 p-4 text-sm leading-5 text-emerald-100/75"><b className="text-emerald-200">Read-only wallet data</b><br />No wallet transfer, freeze, or balance-edit operation is enabled.</div><Button variant="ghost" className="mt-8 w-full justify-start text-emerald-100 hover:bg-emerald-50/10 hover:text-white" onClick={onSignOut}><LogOut size={17} /> Sign out</Button></aside><section className="min-w-0 p-5 md:p-8 lg:p-10"><header className="border-b border-slate-200 pb-7"><p className="text-xs font-black uppercase tracking-[.16em] text-emerald-600">Users & KYC</p><h1 className="mt-2 text-3xl font-black tracking-tight">Wallet Management</h1><p className="mt-2 text-sm text-slate-500">Linked wallet directory and internal balance views.</p></header><div className="mt-5 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900"><b>Live admin data:</b> Linked wallets, Demo USDT balances, and existing provider-ledger balances are displayed separately.</div><WalletsPage request={request} /></section></div></main>;
 }
 
 function PreviewMetric({ label, value, detail, tone = "emerald" }: { label: string; value: string; detail: string; tone?: "emerald" | "amber" | "rose" | "sky" }) {
@@ -133,7 +128,7 @@ function PreviewTable({ headers, rows }: { headers: string[]; rows: string[][] }
   return <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full min-w-[760px] text-left text-sm"><thead className="border-b border-slate-200 bg-slate-50"><tr>{headers.map((header) => <th key={header} className="px-4 py-3 text-[10px] font-black uppercase tracking-wide text-slate-500">{header}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={`${row[0]}-${index}`} className="border-b border-slate-100 last:border-0">{row.map((cell, cellIndex) => <td key={`${cell}-${cellIndex}`} className={`px-4 py-3 ${cell === "VERIFIED" || cell === "ACTIVE" || cell === "HEALTHY" || cell === "CONTRACT OK" ? "font-bold text-emerald-600" : cell === "REJECTED" || cell === "BLOCKED" || cell === "HIGH" || cell === "FAKE CONTRACT" ? "font-bold text-rose-600" : cell === "PENDING" || cell === "REVIEW" || cell === "MEDIUM" ? "font-bold text-amber-600" : "text-slate-700"}`}>{cell}</td>)}</tr>)}</tbody></table></div>;
 }
 
-function StaticPageContent({ page, users = [], usersLoading = false, userSearch = "", setUserSearch, onRefreshUsers }: { page: StaticPageKey; users?: AdminUser[]; usersLoading?: boolean; userSearch?: string; setUserSearch?: (value: string) => void; onRefreshUsers?: () => void }) {
+function StaticPageContent({ page, users = [], usersLoading = false, userSearch = "", setUserSearch, onRefreshUsers, onViewUser = () => {} }: { page: StaticPageKey; users?: AdminUser[]; usersLoading?: boolean; userSearch?: string; setUserSearch?: (value: string) => void; onRefreshUsers?: () => void; onViewUser?: (userId: string) => void }) {
   const depositRows = [["10:24", "MP24567", "Arjun Kumar", "TRC20", "a1b2...e5f6", "1,250", "12/20", "PENDING"], ["10:22", "MP24568", "Neha Sharma", "ERC20", "0x7f6...b2a1", "500", "20/20", "VERIFIED"], ["10:20", "MP24570", "Sanjay Verma", "TRC20", "0x2ab...c910", "10,000", "20/20", "REJECTED"], ["10:15", "MP24571", "Pooja Singh", "TRC20", "b6c7...f0a1", "750", "20/20", "VERIFIED"]];
   if (page === "dashboard") return <div className="mt-7 space-y-5"><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5"><PreviewMetric label="Total deposits" value="285,760.42" detail="+18.45% / 7d" /><PreviewMetric label="Live deposits" value="12" detail="Last 5 min" tone="sky" /><PreviewMetric label="Pending deposits" value="23" detail="Awaiting confirmation" tone="amber" /><PreviewMetric label="Verified deposits" value="152" detail="Completed today" /><PreviewMetric label="Rejected deposits" value="9" detail="Unauthorized / fake" tone="rose" /></div><div className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]"><section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-black">Live USDT Deposits</h2><p className="mb-4 mt-1 text-xs text-slate-500">Server-observed blockchain transactions</p><PreviewTable headers={["Time", "User", "Net", "TxID", "Amount", "Conf.", "Status"]} rows={depositRows.map(([time, , user, net, txid, amount, conf, status]) => [time, user, net, txid, amount, conf, status])} /></section><div className="space-y-5"><section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-black">USDT Contract Whitelist</h2><p className="mt-1 text-xs text-slate-500">Exact contract match per network</p>{["TRC20 / TRON", "ERC20 / Ethereum", "BEP20 / BSC"].map((item) => <div key={item} className="mt-4 flex justify-between text-sm font-semibold"><span>{item}</span><span className="text-emerald-600">VERIFIED</span></div>)}</section><section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-black">Risk Alerts</h2>{["High-risk address detected", "Sanctioned address attempt", "Fake token contract"].map((item) => <div key={item} className="mt-4 flex justify-between text-sm"><span>{item}</span><span className="font-bold text-rose-600">HIGH</span></div>)}</section></div></div></div>;
   if (page === "deposits") return <div className="mt-7"><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><PreviewMetric label="Live" value="12" detail="Now" tone="sky" /><PreviewMetric label="Pending" value="23" detail="Today" tone="amber" /><PreviewMetric label="Verified" value="152" detail="Today" /><PreviewMetric label="Rejected" value="9" detail="Today" tone="rose" /></div><section className="mt-5 rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-black">Deposit Queue</h2><p className="mb-4 mt-1 text-xs text-slate-500">All deposits remain pending until independent verification is complete.</p><PreviewTable headers={["Time", "User ID", "User", "Network", "TxID", "Amount", "Conf.", "Status"]} rows={depositRows} /><div className="mt-5 flex flex-wrap gap-3"><Button variant="outline">Network: All</Button><Button variant="outline">Status: All</Button><Button variant="outline">Date: Today</Button><Button variant="outline" disabled>Export CSV</Button></div></section></div>;
@@ -141,7 +136,7 @@ function StaticPageContent({ page, users = [], usersLoading = false, userSearch 
   if (page === "contracts") return <div className="mt-7"><section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-black">Approved USDT Contracts</h2><p className="mb-5 mt-1 text-sm text-slate-500">Use exact contract addresses per network. Token name and symbol alone are never trusted.</p><PreviewTable headers={["Network", "Chain", "Asset", "Official contract", "Status"]} rows={[["TRC20", "TRON", "USDT", "TR7NHqjeKQxGTCi8q8zY4pL8otSzgiLj6t", "ACTIVE"], ["ERC20", "Ethereum", "USDT", "0xdAC17F958D2ee523a2206206994597C13D831ec7", "ACTIVE"], ["BEP20", "BSC", "USDT", "0x55d398326f99059fF775485246999027B3197955", "ACTIVE"]]} /></section><div className="mt-5 grid gap-5 md:grid-cols-2"><PreviewBulletCard title="Contract Checks" items={["Exact contract match", "Network match", "Transfer event / decimals", "No user override"]} /><PreviewBulletCard title="Admin Controls" items={["Change request", "Two-person approval", "Version history", "Audit log"]} /></div></div>;
   if (page === "rejected") return <div className="mt-7"><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><PreviewMetric label="Fake contract" value="4" detail="Open cases" tone="rose" /><PreviewMetric label="Wrong network" value="2" detail="Open cases" tone="rose" /><PreviewMetric label="Blacklisted" value="2" detail="Open cases" tone="rose" /><PreviewMetric label="Other" value="1" detail="Open cases" tone="amber" /></div><section className="mt-5 rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-black">Rejection Queue</h2><p className="mb-4 mt-1 text-xs text-slate-500">Rejected or held deposits never increase available balance.</p><PreviewTable headers={["Time", "User ID", "User", "Network", "Amount", "Reason", "State"]} rows={[["10:20", "MP24570", "Sanjay Verma", "TRC20", "$ 10,000", "Fake USDT contract", "REJECTED"], ["10:12", "MP24572", "Deepak Singh", "ERC20", "$ 5,000", "Unauthorized token", "REJECTED"], ["10:08", "MP24571", "Vikram Patel", "BEP20", "$ 7,500", "Blacklisted address", "REJECTED"], ["09:54", "MP24573", "Ramesh Kumar", "TRC20", "$ 3,000", "Insufficient confirmations", "PENDING"]]} /></section></div>;
   if (page === "risks") return <div className="mt-7"><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><PreviewMetric label="High risk" value="7" detail="Open cases" tone="rose" /><PreviewMetric label="AML review" value="14" detail="Open cases" tone="amber" /><PreviewMetric label="Blacklisted" value="3" detail="Open cases" tone="rose" /><PreviewMetric label="Cleared" value="98" detail="Open cases" /></div><section className="mt-5 rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-black">Risk Alerts</h2><p className="mb-4 mt-1 text-xs text-slate-500">Prioritized by severity</p><PreviewTable headers={["Time", "Address / TxID", "Network", "Reason", "Severity"]} rows={[["10:24", "a1b2c3...e5f66", "TRC20", "High-risk address", "HIGH"], ["10:21", "0x7f6e...b2a1", "ERC20", "Sanctioned address", "HIGH"], ["10:17", "0x9a8b...3e4f", "BEP20", "Mixing service", "HIGH"], ["10:14", "b6c7d8...f0a1", "TRC20", "Velocity anomaly", "MEDIUM"]]} /></section></div>;
-  if (page === "users") return <UsersPage users={users} loading={usersLoading} search={userSearch} onSearchChange={setUserSearch || (() => {})} onRefresh={() => onRefreshUsers?.()} />;
+  if (page === "users") return <UsersPage users={users} loading={usersLoading} search={userSearch} onSearchChange={setUserSearch || (() => {})} onRefresh={() => onRefreshUsers?.()} onViewUser={onViewUser} />;
   // Retained temporarily as a reversible reference while the Users feature is verified locally.
   if (false && page === "users") {
     const verifiedKyc = users.filter((user) => user.kycStatus === "verified").length;
@@ -165,7 +160,15 @@ function Metric({ label, value, icon }: { label: string; value: string | number;
 function Status({ status }: { status: string }) { const styles: Record<string, string> = { DRAFT: "bg-slate-100 text-slate-600", SOON: "bg-amber-100 text-amber-800", OPEN: "bg-emerald-100 text-emerald-800", LIVE: "bg-rose-100 text-rose-700", CLOSED: "bg-indigo-100 text-indigo-700", SETTLED: "bg-teal-100 text-teal-800", CANCELLED: "bg-slate-200 text-slate-600", PENDING_REVIEW: "bg-amber-100 text-amber-800", APPROVED: "bg-sky-100 text-sky-800", COMPLETED: "bg-emerald-100 text-emerald-800", REJECTED: "bg-rose-100 text-rose-700", FAILED: "bg-rose-100 text-rose-700" }; return <span className={`rounded-full px-2.5 py-1 text-xs font-black ${styles[status] || "bg-slate-100 text-slate-600"}`}>{status}</span>; }
 
 type StockIndex = { symbol: string; rawSymbol: string; name: string; value: string; rawValue: number; change: string; changeValue: string; isPositive: boolean; type?: string; provider?: string };
-type MarketSearchItem = { instrumentCode: string; name: string; rawSymbol: string; quote?: { value?: string; rawValue?: number; change?: string; changeValue?: string; isPositive?: boolean } };
+type MarketSearchItem = { instrumentCode: string; name: string; rawSymbol: string; quote?: { value?: string; rawValue?: number; change?: string; changeValue?: string; isPositive?: boolean; provider?: string } };
+const contestTypeOptions = [
+  ["CUSTOM", "Custom schedule"],
+  ["DAY_OPEN", "Day Open · target 9:15 AM / locks 8:59 AM"],
+  ["ONE_HOUR", "10 AM · target 10:00 AM / locks 8:59 AM"],
+  ["MIDDAY", "Midday · target 12:00 PM / locks 10:45 AM"],
+  ["CLOSING", "Closing · target 3:30 PM / locks 9:00 AM"],
+  ["NEXT_DAY_CLOSE", "Next-day close · locks previous close"],
+] as const;
 
 function toStockIndex(item: MarketSearchItem): StockIndex {
   return {
@@ -178,7 +181,7 @@ function toStockIndex(item: MarketSearchItem): StockIndex {
     changeValue: item.quote?.changeValue || "0.00",
     isPositive: Boolean(item.quote?.isPositive),
     type: "INDEX",
-    provider: "yahoo",
+    provider: item.quote?.provider || "fallback",
   };
 }
 
@@ -207,6 +210,32 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
       .catch((err) => console.error("Error fetching market data:", err))
       .finally(() => setLoadingStocks(false));
   }, [open, apiBase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Optional real-time enhancement. The normal REST load/search remains the
+  // fallback if a proxy, browser, or provider does not permit WebSockets.
+  useEffect(() => {
+    if (!open) return;
+    const streamUrl = `${apiBase.replace(/^http/i, "ws").replace(/\/$/, "")}/market/live`;
+    let socket: WebSocket | undefined;
+    try {
+      socket = new WebSocket(streamUrl);
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data) as { type?: string; data?: StockIndex[] };
+          if (!Array.isArray(payload.data) || (payload.type !== "market_tick" && payload.type !== "market_snapshot")) return;
+          setIndices((current) => current.map((index) => {
+            const update = payload.data?.find((quote) => quote.rawSymbol === index.rawSymbol);
+            return update ? { ...index, ...update, type: "INDEX" } : index;
+          }));
+          setSelectedStock((current) => {
+            const update = payload.data?.find((quote) => quote.rawSymbol === current?.rawSymbol);
+            return update && current ? { ...current, ...update, type: "INDEX" } : current;
+          });
+        } catch { /* Ignore malformed optional market stream messages. */ }
+      };
+    } catch { /* The REST selector continues to work without the stream. */ }
+    return () => socket?.close();
+  }, [open, apiBase]);
 
   // Search only registered instruments that the current demo contest schema supports.
   useEffect(() => {
@@ -244,7 +273,7 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
       instrumentCode: cleanSymbol,
       title: `${stock.name} Prediction`,
       question: `Will ${stock.name} close above ₹${stock.value} by market close?`,
-      settlementSource: `${stock.name} official market closing price via Yahoo Finance`,
+      settlementSource: `${stock.name} official closing value`,
     });
   };
 
@@ -265,17 +294,17 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Create Contest from Market Data</DialogTitle>
-          <DialogDescription>Select a registered live index to auto-fill a virtual-credit demo contest.</DialogDescription>
+          <DialogTitle>Create contest</DialogTitle>
+          <DialogDescription>Select an index to auto-fill a virtual-credit demo contest.</DialogDescription>
         </DialogHeader>
 
-        {/* Live Stock / Index Selector & Search */}
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-2.5">
+        {/* Index selector: source/provider details stay internal, not in admin UI. */}
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-800">
-              ⚡ Supported live indices ({filteredList.length} shown)
+            <span className="text-sm font-extrabold text-slate-900">
+              Select index
             </span>
-            {loadingStocks && <span className="text-xs font-semibold text-emerald-600 animate-pulse">Loading live market feed...</span>}
+            {loadingStocks && <span className="text-xs font-semibold text-slate-500 animate-pulse">Refreshing prices…</span>}
           </div>
 
           {/* Search Bar & Category Filters */}
@@ -304,8 +333,8 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
             </div>
           </div>
 
-          {/* Instrument Badges */}
-          <div className="flex flex-wrap gap-2 pt-1 max-h-36 overflow-y-auto">
+          {/* Clean selectable price cards. */}
+          <div className="grid max-h-60 grid-cols-1 gap-2 overflow-y-auto pt-1 sm:grid-cols-2 md:grid-cols-3">
             {filteredList.map((stk) => {
               const isSelected = selectedStock?.symbol === stk.symbol || form.instrumentCode === stk.symbol.replace(/[^a-zA-Z0-9]/g, "");
               return (
@@ -313,42 +342,29 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
                   key={stk.symbol}
                   type="button"
                   onClick={() => handleSelectStock(stk)}
-                  className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 border ${
+                  className={`min-h-28 rounded-xl border p-3 text-left transition-all ${
                     isSelected
-                      ? "bg-emerald-600 text-white border-emerald-700 shadow-sm"
-                      : "bg-white text-slate-700 border-slate-200 hover:bg-emerald-100/50"
+                      ? "border-emerald-500 bg-white ring-1 ring-emerald-500 shadow-sm"
+                      : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/30"
                   }`}
                 >
-                  <span>{stk.name}</span>
-                  <span className={`text-[11px] font-mono ${isSelected ? "text-emerald-100" : stk.isPositive ? "text-emerald-600 font-semibold" : "text-rose-600 font-semibold"}`}>
-                    ₹{stk.value} ({stk.change})
+                  <span className="flex items-center gap-2">
+                    <span className={`grid size-4 place-items-center rounded-full border-2 ${isSelected ? "border-emerald-600" : "border-slate-300"}`}>
+                      {isSelected && <span className="size-2 rounded-full bg-emerald-600" />}
+                    </span>
+                    <span className="text-sm font-extrabold text-slate-900">{stk.name}</span>
+                  </span>
+                  <span className="mt-3 block text-xl font-black tracking-tight text-slate-950">₹{stk.value}</span>
+                  <span className={`mt-1 block text-sm font-bold ${stk.isPositive ? "text-emerald-600" : "text-rose-600"}`}>
+                    {stk.isPositive ? "▲" : "▼"} {stk.change}
                   </span>
                 </button>
               );
             })}
             {filteredList.length === 0 && !loadingStocks && (
-              <p className="text-xs text-slate-500 py-2">No supported index matches this search.</p>
+              <p className="col-span-full py-3 text-xs text-slate-500">No supported index matches this search.</p>
             )}
           </div>
-
-          {/* Selected Stock Live Card */}
-          {selectedStock && (
-            <div className="mt-2 flex items-center justify-between rounded-lg bg-white p-2.5 text-xs border border-emerald-100 shadow-2xs">
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-slate-800">{selectedStock.name}</span>
-                <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-600">{selectedStock.rawSymbol}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-slate-900">₹{selectedStock.value}</span>
-                <span className={`font-semibold ${selectedStock.isPositive ? "text-emerald-600" : "text-rose-600"}`}>
-                  {selectedStock.change}
-                </span>
-                <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 uppercase">
-                  Yahoo Live
-                </span>
-              </div>
-            </div>
-          )}
         </div>
 
         <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2 mt-2">
@@ -358,7 +374,12 @@ function CreateDialog({ open, onOpenChange, form, setForm, onSubmit, apiBase }: 
           {field("entryCredits", "Entry amount (Demo USDT, whole units)", "number")}
           {field("prizePoolCredits", "Prize pool (Demo USDT, whole units)", "number")}
           {field("playerCapacity", "Player capacity", "number")}
+          <div className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+            <p className="font-extrabold">Rank-wise prize distribution</p>
+            <p className="mt-1 text-amber-900/80">The Figma prize schedule is applied automatically at settlement: 1st 40%, 2nd 20%, 3rd 15%, ranks 4–5 10%, ranks 6–10 8%, ranks 11–50 5%, and ranks 51–100 2%.</p>
+          </div>
           <label className="text-sm font-bold text-slate-700">Lifecycle mode<select className="mt-1.5 h-10 w-full rounded-md border border-slate-200 bg-white px-3" value={form.lifecycleMode} onChange={(e) => setForm({ ...form, lifecycleMode: e.target.value })}><option value="SCHEDULED">Scheduled automatically</option><option value="MANUAL">Manual status control</option></select></label>
+          <label className="text-sm font-bold text-slate-700">Contest type<select className="mt-1.5 h-10 w-full rounded-md border border-slate-200 bg-white px-3" value={form.contestType} onChange={(e) => setForm({ ...form, contestType: e.target.value })}>{contestTypeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <label className="sm:col-span-2 text-sm font-bold text-slate-700">
             Question
             <textarea
