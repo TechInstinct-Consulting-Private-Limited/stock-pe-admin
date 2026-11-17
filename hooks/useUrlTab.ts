@@ -6,7 +6,7 @@ import type { StaticPageKey } from "@/types/admin";
 export type AdminTab = StaticPageKey | "contests";
 
 function isAdminTab(value: string | null): value is AdminTab {
-  return value === "contests" || value === "dashboard" || value === "deposits" || value === "verification" || value === "contracts" || value === "rejected" || value === "risks" || value === "users" || value === "wallets" || value === "withdrawals" || value === "transactions" || value === "health" || value === "settings" || value === "notifications";
+  return value === "contests" || value === "dashboard" || value === "deposits" || value === "verification" || value === "contracts" || value === "rejected" || value === "risks" || value === "users" || value === "wallets" || value === "withdrawals" || value === "transactions" || value === "health" || value === "settings" || value === "notifications" || value === "adminAccess";
 }
 
 export function useUrlTab() {

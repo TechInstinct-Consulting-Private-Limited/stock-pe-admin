@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ChevronRight, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { nextContestStatus, type Contest } from "@/types/admin";
+import { formatAmount } from "@/lib/formatters";
 
 const columns = [
   { status: "DRAFT", label: "Draft", tone: "border-slate-200 bg-slate-50" },
@@ -75,7 +76,7 @@ function KanbanCard({ contest, onViewDetails, onAdvance, onSettle }: { contest: 
     <h4 className="mt-1.5 line-clamp-1 text-sm font-black text-slate-950">{contest.title}</h4>
     <div className="mt-3 grid grid-cols-[112px_1fr] divide-y divide-slate-100 rounded-lg border border-slate-100 bg-slate-50 px-3 py-1.5 text-xs"><ScheduleRow label="Entries open" value={formatTime(contest.opens_at)} /><ScheduleRow label="Prediction locks" value={formatTime(contest.live_at || contest.closes_at)} /><ScheduleRow label="Target / result" value={formatTime(contest.closes_at)} /></div>
     <div className="mt-3 rounded-lg bg-slate-50 p-2.5"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Current milestone</p><p className="mt-1 text-xs font-black text-slate-700"><Milestone contest={contest} /></p></div>
-    <div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div><p className="font-bold text-slate-400">Players</p><p className="mt-0.5 flex items-center gap-1 font-black text-slate-800"><Users size={13} /> {contest.player_count} / {contest.player_capacity}</p></div><div><p className="font-bold text-slate-400">Pool</p><p className="mt-0.5 font-black text-slate-800">{contest.prize_pool_credits} {unit}</p></div></div>
+    <div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div><p className="font-bold text-slate-400">Players</p><p className="mt-0.5 flex items-center gap-1 font-black text-slate-800"><Users size={13} /> {contest.player_count} / {contest.player_capacity}</p></div><div><p className="font-bold text-slate-400">Pool</p><p className="mt-0.5 font-black text-slate-800">{formatAmount(contest.prize_pool_credits)} {unit}</p></div></div>
     <div className="mt-3 flex flex-wrap gap-2"><Button type="button" size="sm" variant="outline" onClick={() => onViewDetails(contest.public_id)}>Details</Button>{contest.status === "CLOSED" ? <Button size="sm" onClick={() => onSettle(contest)}>Settle</Button> : contest.status === "SETTLED" ? <span className="self-center text-[11px] font-bold text-emerald-700">Rewards credited</span> : next ? <Button size="sm" variant="outline" onClick={() => onAdvance(contest)}>{next}<ChevronRight size={14} /></Button> : null}</div>
   </article>;
 }

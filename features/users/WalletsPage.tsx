@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ApiRequest } from "@/services/api-client";
 import { listAdminWallets, type AdminWalletDirectoryItem } from "./user.api";
+import { formatDemoUsdt } from "@/lib/formatters";
 
 const mask = (value: string) => `${value.slice(0, 8)}…${value.slice(-6)}`;
-const balance = (value: string) => `${value} USDT`;
+const balance = (value: string) => formatDemoUsdt(value);
 
 export function WalletsPage({ request }: { request: ApiRequest }) {
   const [wallets, setWallets] = useState<AdminWalletDirectoryItem[]>([]);

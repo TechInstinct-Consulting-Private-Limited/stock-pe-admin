@@ -5,6 +5,7 @@ import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { nextContestStatus, type Contest } from "@/types/admin";
+import { formatAmount } from "@/lib/formatters";
 
 const typeLabels: Record<string, string> = {
   DAY_OPEN: "Day Open",
@@ -75,7 +76,7 @@ function ContestRow({ contest, onViewDetails, onAdvance, onSettle }: { contest: 
     <TableCell className="min-w-[205px] text-xs"><Schedule label="Open" value={formatTime(contest.opens_at)} /><Schedule label="Lock" value={formatTime(contest.live_at || contest.closes_at)} /><Schedule label="Target" value={formatTime(contest.closes_at)} /></TableCell>
     <TableCell className="min-w-[155px] text-xs font-black text-slate-700"><LiveMilestone contest={contest} /></TableCell>
     <TableCell className="min-w-[135px]"><p className="text-sm font-black text-slate-800">{contest.player_count} / {contest.player_capacity}</p><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${fill}%` }} /></div><p className="mt-1 text-[11px] font-bold text-slate-500">{fill}% filled</p></TableCell>
-    <TableCell className="min-w-[135px]"><p className="font-black text-slate-800">{contest.prize_pool_credits} {unit}</p><p className="mt-1 text-[11px] font-bold text-slate-500">Entry {contest.entry_credits} {unit}</p></TableCell>
+    <TableCell className="min-w-[135px]"><p className="font-black text-slate-800">{formatAmount(contest.prize_pool_credits)} {unit}</p><p className="mt-1 text-[11px] font-bold text-slate-500">Entry {formatAmount(contest.entry_credits)} {unit}</p></TableCell>
     <TableCell className="min-w-[145px]"><p className={`text-xs font-black ${contest.status === "SETTLED" ? "text-teal-700" : contest.status === "CANCELLED" ? "text-slate-500" : "text-slate-600"}`}>{result}</p></TableCell>
     <TableCell className="min-w-[185px] text-right"><div className="flex flex-wrap justify-end gap-2"><Button type="button" size="sm" variant="outline" onClick={() => onViewDetails(contest.public_id)}>View Details</Button>{contest.status === "CLOSED" ? <Button size="sm" onClick={() => onSettle(contest)}>Settle</Button> : contest.status === "SETTLED" ? null : next ? <Button size="sm" variant="outline" onClick={() => onAdvance(contest)}>{next}<ChevronRight size={15} /></Button> : null}</div></TableCell>
   </TableRow>;

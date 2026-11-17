@@ -65,7 +65,7 @@ export type AdminUser = {
   joinedAt: string;
 };
 
-export type StaticPageKey = "dashboard" | "deposits" | "verification" | "contracts" | "rejected" | "risks" | "users" | "wallets" | "withdrawals" | "transactions" | "health" | "settings" | "notifications";
+export type StaticPageKey = "dashboard" | "deposits" | "verification" | "contracts" | "rejected" | "risks" | "users" | "wallets" | "withdrawals" | "transactions" | "health" | "settings" | "notifications" | "adminAccess";
 
 export const contestStatuses = ["ALL", "DRAFT", "SOON", "OPEN", "LIVE", "CLOSED", "SETTLED", "CANCELLED"];
 
